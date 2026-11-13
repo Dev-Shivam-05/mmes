@@ -1,0 +1,9 @@
+.shots/
+.cache/
+__pycache__/
+*.pyc
+docs/debate/**/shots/
+docs/debate/**/tab.json
+docs/debate/**/SESSION.md
+docs/debate/**/send-*.log
+docs/debate/**/stop-awake

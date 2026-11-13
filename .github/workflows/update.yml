@@ -1,0 +1,43 @@
+# Daily end-of-day update (spec row 3). GitHub starts scheduled runs late, sometimes by hours. That is fine here:
+# NSE publishes the F&O bhavcopy around 18:00-20:00 IST, and update.py treats today's 404 as "not published yet".
+name: update
+on:
+  schedule:
+    - cron: '0 11 * * 1-5'      # 16:30 IST, Mon-Fri
+    - cron: '30 15 * * 1-5'     # 21:00 IST, a second try after the bhavcopy is out
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: live
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      # nseindia.com answers only a headed Chrome (the source project's CLAUDE.md), so the browser runs under xvfb.
+      # ubuntu-latest ships Google Chrome, which channel="chrome" uses.
+      - run: xvfb-run -a python -I scripts/update.py
+      - run: python -I scripts/check.py
+      - name: Commit the new data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then echo "no new data"; else git commit -m "data: daily update $(date -u +%F)" && git push origin live; fi
+  # A push made with GITHUB_TOKEN does not start other workflows, so the deploy is called from here.
+  deploy:
+    needs: update
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

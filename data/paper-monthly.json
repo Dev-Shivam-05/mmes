@@ -1,0 +1,37 @@
+{
+ "rules": "k 1, 2x-credit stop. Entry at the close of the month's first trading day: sell 1 set (65 CE + 65 PE) of the month's last NIFTY expiry. W = ATM CE + ATM PE close; CE strike = nearest 50 to spot + W, PE strike = nearest 50 to spot - W. If CE + PE close at or above 2 x the credit on any day before the expiry, both are bought back at the next day's open; otherwise both are held to the expiry day's close. Daily bhavcopy bars only. Net is after charges and 0.25 pt slippage per leg per side.",
+ "months": [
+  {
+   "month": "2026-11",
+   "entry": "2026-11-02",
+   "expiry": "2026-11-23",
+   "spot": 23440.8,
+   "W": 614.95,
+   "ceK": 24050,
+   "peK": 22850,
+   "ceIn": 75.85,
+   "peIn": 135.3,
+   "credit": 211.15,
+   "stopAt": 422.3,
+   "status": "closed",
+   "trigger": {
+    "date": "2026-11-05",
+    "value": 673.2
+   },
+   "last": {
+    "date": "2026-11-06",
+    "ce": 506.8,
+    "pe": 37.9,
+    "value": 544.7,
+    "mtm": -21882.17
+   },
+   "exit": {
+    "date": "2026-11-06",
+    "ce": 506.8,
+    "pe": 37.9,
+    "why": "STOP"
+   },
+   "net": -21882.17
+  }
+ ]
+}

@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MMES · NIFTY expiry strangle</title>
+<meta name="description" content="Backtest and paper results of one NIFTY options strategy: a strangle sold on expiry day, plus a monthly version.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#07090D">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="vendor/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/jetbrains-mono-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+  // Set the theme before the first paint, so a light-theme visitor never sees a dark flash.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('mmes-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') {
+      t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="stale" id="staleBanner" role="status" hidden></div>
+
+<header class="topbar" id="top">
+  <div class="wrap topbar-in">
+    <a class="brand" href="#today">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="8"/><path d="M5 22.5 11.5 11h9L27 22.5"/></svg>
+      <h1 class="brand-name"><span class="b1">MMES</span> <span class="brand-dot">·</span> <span class="b2">NIFTY expiry strangle</span></h1>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <button class="btn btn-ghost menu-btn" type="button" id="menuBtn" aria-expanded="false" aria-controls="navList">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+        <span class="menu-txt">Menu</span>
+      </button>
+      <ul class="nav-list" id="navList">
+        <li><a href="#today">Today</a></li>
+        <li><a href="#strategies">Strategies</a></li>
+        <li><a href="#performance">Performance</a></li>
+        <li><a href="#capital">Capital</a></li>
+        <li><a href="#months">Months</a></li>
+        <li><a href="#trades">Trades</a></li>
+        <li><a href="#how">How it works</a></li>
+      </ul>
+    </nav>
+    <button class="btn btn-ghost icon-btn" type="button" id="themeBtn" aria-label="Switch to light theme">
+      <svg class="i-sun" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="3.5"/><path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M4.2 15.8l1.7-1.7M14.1 5.9l1.7-1.7"/></svg>
+      <svg class="i-moon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 12.6A7 7 0 0 1 7.4 3.5a7 7 0 1 0 9.1 9.1Z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+  <section id="today" class="sec" aria-labelledby="h-today">
+    <div class="ticker" id="ticker" role="group" aria-label="Summary">
+      <div class="tk skel-line"></div><div class="tk skel-line"></div><div class="tk skel-line"></div><div class="tk skel-line"></div><div class="tk skel-line"></div>
+    </div>
+    <div class="sec-head">
+      <h2 id="h-today">Today</h2>
+      <p class="sec-sub">Is it making money, what is open, and what happens next.</p>
+    </div>
+    <div class="sumrow" id="summary"></div>
+    <div class="today-grid" id="todayBody">
+      <div class="card skel t-paper-m" aria-hidden="true"></div>
+      <div class="card skel" aria-hidden="true"></div>
+    </div>
+    <p class="fresh" id="freshLine"></p>
+  </section>
+
+  <section id="strategies" class="sec" aria-labelledby="h-strategies">
+    <div class="sec-head">
+      <h2 id="h-strategies">Strategies</h2>
+      <p class="sec-sub">Five backtests. Pick one: the charts, the trade squares and the table below follow it.</p>
+    </div>
+    <p class="assume" id="assume"></p>
+    <div class="strat-grid" id="stratGrid">
+      <div class="card skel tall" aria-hidden="true"></div>
+      <div class="card skel tall" aria-hidden="true"></div>
+      <div class="card skel tall" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <div class="perf-row">
+    <section id="performance" class="sec-in" aria-labelledby="h-performance">
+      <div class="sec-head">
+        <h2 id="h-performance">Performance</h2>
+        <p class="sec-sub">The selected strategy, trade by trade. Switch the others on to compare.</p>
+      </div>
+      <div class="perf-head glow" id="perfHead" aria-live="polite"></div>
+      <div class="panel chart-panel">
+        <div class="chart-bar">
+          <div class="legend" id="eqLegend" role="group" aria-label="Show or hide a strategy on the chart"></div>
+          <div class="seg seg-sm" id="eqRange" role="group" aria-label="Time range">
+            <button type="button" data-range="2024" aria-pressed="false">2024</button>
+            <button type="button" data-range="2025" aria-pressed="false">2025</button>
+            <button type="button" data-range="2026" aria-pressed="false">2026</button>
+            <button type="button" data-range="all" aria-pressed="true">All</button>
+          </div>
+        </div>
+        <div class="chart chart-equity" id="equityChart" role="img" aria-label="Running total of profit of the selected strategy"></div>
+      </div>
+      <div class="panel chart-panel">
+        <div class="panel-head">
+          <h3><span class="swatch" id="ddSwatch" aria-hidden="true"></span><span id="ddName">Drawdown</span></h3>
+          <p class="panel-note" id="ddNote">How far the running total sat below its last high.</p>
+        </div>
+        <div class="chart chart-dd" id="ddChart" role="img" aria-label="Drawdown of the selected strategy"></div>
+      </div>
+    </section>
+
+    <section id="capital" class="sec-in cap-side" aria-labelledby="h-capital">
+      <div class="panel cap-panel">
+        <div class="sec-head">
+          <h2 id="h-capital">Capital</h2>
+          <p class="sec-sub">How many sets your money can carry.</p>
+        </div>
+        <form class="cap-form" id="capForm" novalidate>
+          <div class="field">
+            <label for="capInput">Your capital</label>
+            <div class="money-input">
+              <span aria-hidden="true">₹</span>
+              <input id="capInput" type="text" inputmode="numeric" autocomplete="off" value="2,70,000" aria-describedby="capHelp">
+            </div>
+            <p class="help" id="capHelp">In rupees. Commas are added as you type.</p>
+          </div>
+          <div class="field">
+            <label for="capStrat">Strategy</label>
+            <select id="capStrat"></select>
+          </div>
+        </form>
+        <div class="cap-out" id="capOut" aria-live="polite"></div>
+      </div>
+    </section>
+  </div>
+
+  <section id="months" class="sec" aria-labelledby="h-months">
+    <div class="sec-head">
+      <h2 id="h-months">Months</h2>
+      <p class="sec-sub">Profit or loss of each calendar month. Green made money, red lost it, and the deeper the colour, the bigger the amount. An outlined cell means no trade. Click a cell to list its trades.</p>
+    </div>
+    <div class="seg mobile-year" role="group" aria-label="Year" hidden></div>
+    <div class="panel chart-panel">
+      <div class="chart chart-heat" id="heatChart" role="img" aria-label="Monthly profit and loss of each strategy"></div>
+      <div class="heat-legend" id="heatLegend" aria-hidden="true"></div>
+    </div>
+    <div class="months-grid">
+      <div class="panel">
+        <div class="panel-head flush">
+          <h3 id="sqTitle">Every trade</h3>
+          <p class="panel-note" id="sqNote">One square per trade, in date order.</p>
+        </div>
+        <div class="squares" id="squares"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head flush">
+          <h3>How trades ended</h3>
+          <p class="panel-note">Share of trades and the money each exit made.</p>
+        </div>
+        <div id="exitBars" class="xr-list"></div>
+      </div>
+    </div>
+    <div class="panel chart-panel">
+      <div class="panel-head">
+        <h3>Monthly strategy · NIFTY price and trades <span id="mvInfo"></span></h3>
+        <p class="panel-note" id="mvNote">Daily candles with each month's sold strikes.</p>
+      </div>
+      <div class="chart chart-mv" id="mvChart" role="img" aria-label="NIFTY daily candles with the monthly strategy's sold strikes"></div>
+      <p class="mv-range mono" id="mvRange" aria-live="polite"></p>
+      <div id="mvAbout"></div>
+    </div>
+  </section>
+
+  <section id="trades" class="sec" aria-labelledby="h-trades">
+    <div class="sec-head">
+      <h2 id="h-trades">Trades</h2>
+      <p class="sec-sub">Every trade of one strategy. Click a column name to sort. Click a row to read what happened; a weekly row also opens that day's candles.</p>
+    </div>
+    <div class="panel table-panel">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Strategy" id="tStrat"></div>
+        <div class="tfilter" id="tFilter" hidden></div>
+        <div class="filters">
+          <label class="field-inline"><span>Year</span>
+            <select id="tYear"><option value="all">All years</option></select>
+          </label>
+          <label class="field-inline"><span>Result</span>
+            <select id="tResult">
+              <option value="all">All</option>
+              <option value="profit">Profit</option>
+              <option value="loss">Loss</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <p class="t-summary" id="tSummary" aria-live="polite"></p>
+      <div class="table-scroll" id="tScroll" tabindex="0" role="region" aria-label="Trade table">
+        <table class="ttable" id="tTable">
+          <thead><tr id="tHead"></tr></thead>
+          <tbody id="tBody"><tr><td class="t-empty">Loading trades…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="sec" aria-labelledby="h-how">
+    <div class="sec-head">
+      <h2 id="h-how">How it works</h2>
+      <p class="sec-sub">The weekly rules in four steps, one real day, and the monthly idea.</p>
+    </div>
+    <ol class="steps">
+      <li class="card step">
+        <span class="step-n" aria-hidden="true">1</span>
+        <h3>Expiry day only</h3>
+        <p>Trade only on the day the NIFTY weekly options expire. That is Tuesday, or the trading day before it when Tuesday is a holiday. No trade on any other day.</p>
+      </li>
+      <li class="card step">
+        <span class="step-n" aria-hidden="true">2</span>
+        <h3>Measure the straddle at 09:25</h3>
+        <p>At 09:25, add the price of the at-the-money CE and the at-the-money PE. That sum is the straddle, W.</p>
+      </li>
+      <li class="card step">
+        <span class="step-n" aria-hidden="true">3</span>
+        <h3>Sell two options</h3>
+        <p>Sell the CE at the strike nearest NIFTY + half the straddle, and the PE at the strike nearest NIFTY − half. What you receive is the credit.</p>
+      </li>
+      <li class="card step">
+        <span class="step-n" aria-hidden="true">4</span>
+        <h3>Stop at 2× or exit at 15:15</h3>
+        <p>If CE + PE together cost 2× the credit, buy both back. Otherwise buy both back at 15:15. LEG-20 and LEG-40 differ only here: a leg that rises 20 or 40 points is bought back alone.</p>
+      </li>
+    </ol>
+
+    <div class="panel example" id="example">
+      <h3>A real day: 2 January 2025</h3>
+      <p class="muted" id="exIntro">Loading the example…</p>
+      <div class="ex-grid" id="exGrid"></div>
+    </div>
+
+    <div class="panel monthly-idea">
+      <h3>The monthly idea</h3>
+      <p id="monthlyIdea">Sell one strangle for the whole month instead of one each week. At the close of the month's first trading day, sell the CE one straddle above NIFTY and the PE one straddle below. Hold both to the month's last expiry. If CE + PE close at 2× the credit or more, buy both back at the next day's open. It needs no paid data, because every decision uses end-of-day prices, but it holds the position overnight.</p>
+      <ul class="notes" id="monthlyNotes"></ul>
+    </div>
+
+    <p class="disclaimer" id="disclaimer">Backtest and paper results. Not advice. Past results do not promise future returns.</p>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-in">
+    <p id="footerData">Data as of …</p>
+    <p class="muted">MMES · NIFTY expiry strangle · research only</p>
+  </div>
+</footer>
+
+<div class="drawer" id="dayDrawer" hidden>
+  <div class="drawer-backdrop" data-close></div>
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="dayTitle" tabindex="-1">
+    <div class="drawer-head">
+      <div class="drawer-title">
+        <h2 id="dayTitle">Trade day</h2>
+        <p class="muted" id="daySub">NIFTY 5-minute candles</p>
+      </div>
+      <div class="drawer-actions">
+        <button type="button" class="btn" id="dayPrev" aria-label="Previous trade day"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg></button>
+        <button type="button" class="btn" id="dayNext" aria-label="Next trade day"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg></button>
+        <button type="button" class="btn" id="dayClose" aria-label="Close the day view"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 5l10 10M15 5 5 15"/></svg></button>
+      </div>
+    </div>
+    <div class="drawer-body">
+      <div class="seg seg-sm" id="dayStrat" role="group" aria-label="Exits of which strategy"></div>
+      <p class="day-explain" id="dayExplain"></p>
+      <div class="kv kv-4" id="dayKv"></div>
+      <div class="chart chart-day" id="dayChart" role="img" aria-label="NIFTY 5-minute candles and the sold options' prices"></div>
+      <p class="day-cap">Gaps: no trade print in that 5-minute window.</p>
+    </div>
+  </div>
+</div>
+
+<div class="tip" id="tip" role="tooltip" hidden></div>
+</body>
+</html>
