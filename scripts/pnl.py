@@ -304,6 +304,9 @@ def build(write=True, log=print, weekly_path=None, out_path=None, prev_path=None
            'intraday': intraday}
     if write:
         update.write_json(out_path, res)
+    # the virtual account (account-v1.md) is rebuilt from the same weekly rows, next to the P&L file, by every caller
+    import account                                                # here, like update.py imports this module lazily
+    account.build(weekly=weekly, as_of=as_of, out_path=out_path.parent / 'account.json', write=write, log=log)
     log(f"[pnl] {len(out_days)} days {dates[0] if dates else '-'} .. {as_of}, {len(trades)} trades "
         f"({len(opened)} open), net {summary['net']}, open MTM {summary['openMtm']}")
     return res

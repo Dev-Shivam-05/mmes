@@ -1,4 +1,4 @@
 {
  "trades": [],
- "note": "No weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on the owner's PC from NSE's free option chain (scripts/paper_nse.py)."
+ "note": "No weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on GitHub on each expiry day from NSE's free option chain (scripts/paper_nse.py); the owner's PC is the backup."
 }

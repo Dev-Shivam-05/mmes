@@ -9,13 +9,16 @@ import {
   tooltipBase, tipRow, axisLabel, UI_FONT, NUM_FONT, reducedMotion, yieldToBrowser,
 } from './common.js';
 
-const FILES = { pnl: 'data/pnl-daily.json', meta: 'data/meta.json', calendar: 'data/calendar.json' };
+const FILES = {
+  pnl: 'data/pnl-daily.json', meta: 'data/meta.json', calendar: 'data/calendar.json',
+  account: 'data/account.json', runner: 'data/runner.json',
+};
 // Row 6a series colours.
 const SERIES = { v3: '#8B7CFF', leg20: '#5C93F0', monthly: '#2FD08A' };
 const NAME = { monthly: 'Monthly', v3: 'Weekly v3', leg20: 'Weekly LEG-20' };
 const TYPE = { monthly: 'Overnight', v3: 'Intraday', leg20: 'Intraday' };
 const EVENT = { entry: 'Entry', hold: 'Hold', stop: 'Stop hit', exit: 'Exit', none: 'No position' };
-const WEEKLY_EMPTY = 'No weekly paper trade yet — runs on expiry days from the owner\'s PC.';
+const WEEKLY_EMPTY = 'No weekly paper trade yet — runs on expiry days on GitHub, from NSE\'s live option chain.';
 
 const DEF = {
   net: 'The sum of every day\'s P&L since the first paper trade: realised, open MTM, charges and slippage. 1 set.',
@@ -28,6 +31,15 @@ const DEF = {
   worstDay: 'The trading day with the lowest total.',
   greenDays: 'Days whose total was above zero, out of every trading day since the first paper trade.',
   avg: 'Paper: the net of the closed paper trades divided by their number. Backtest: the backtest\'s average per trade.',
+  // Account card (docs/spec/account-v1.md rows 1, 3, 8 and the data contract).
+  acOpening: 'Virtual money put in on the opening day. Paper trades only, no real orders.',
+  acBalance: 'The opening plus the net of every closed trade, after charges. The funds ledger adds up to it.',
+  acMargin: 'Margin held while a position is open: Zerodha\'s SPAN for the two sold strikes plus the expiry-day 2% ELM, blocked from entry to exit.',
+  acAvailable: 'Balance minus the margin blocked. A trade is skipped when its margin is above this.',
+  acMtm: 'Value of an open position against its sale price. The file is written after the close, so it is 0 there.',
+  acEquity: 'Balance plus open MTM.',
+  acReturn: 'Equity minus the opening, divided by the opening.',
+  acRoom: 'Balance minus the margin the last trade needed. Below zero, the next trade is skipped unless the margin is lower.',
 };
 
 const state = { data: {}, errors: {}, sel: null, month: null };
@@ -90,6 +102,145 @@ async function loadAll() {
     p.days = [...(p.days || [])].sort((a, b) => cmp(a.date, b.date));
     p.trades = p.trades || [];
   }
+}
+
+// ---------- MMES v3 account, funds ledger, runner line (docs/spec/account-v1.md rows 7, 8) ----------
+// The account is shown to the paisa, so its colour is decided to the paisa too: +₹0.40 is green, not neutral.
+const tone2 = (v) => (v == null ? '' : Math.round(Number(v) * 100) > 0 ? 'pos' : Math.round(Number(v) * 100) < 0 ? 'neg' : '');
+// An unsigned amount (balance, margin): no "+", but a negative one still shows its "−".
+const amt2 = (v) => {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const r = Math.round(Number(v) * 100) / 100;
+  return `${r < 0 ? MINUS : ''}₹${nf2.format(Math.abs(r))}`;
+};
+const pctSigned = (v) => {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const r = Math.round(Number(v) * 100);
+  return `${r > 0 ? '+' : r < 0 ? MINUS : ''}${(Math.abs(r) / 100).toFixed(2)}%`;
+};
+const near = (a, b) => Math.abs(Number(a) - Number(b)) <= 0.005 + 1e-9;
+const A = () => state.data.account;
+
+// The published file must add up (contract: balance = opening + the trade amounts, available = balance - margin,
+// equity = balance + open MTM, return = (equity - opening) / opening). A file that does not is shown as published,
+// with a visible line saying which identity failed, never silently.
+function accountProblems(a) {
+  const out = [];
+  let run = 0;
+  (a.ledger || []).forEach((e) => {
+    run = Math.round((run + (Number(e.amount) || 0)) * 100) / 100;
+    if (!near(run, e.balance)) out.push(`the ${fmtDateShort(e.date)} line's balance after (${amt2(e.balance)}, the lines add up to ${amt2(run)})`);
+  });
+  const trades = (a.ledger || []).filter((e) => e.kind !== 'open').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  if (!near(a.opening + trades, a.balance)) out.push(`balance ${amt2(a.balance)} is not opening + the ledger (${amt2(a.opening + trades)})`);
+  if (!near(a.balance - a.marginBlocked, a.available)) out.push('available is not balance − margin blocked');
+  if (!near(a.balance + a.openMtm, a.equity)) out.push('equity is not balance + open MTM');
+  if (a.opening && !near(((a.equity - a.opening) / a.opening) * 100, a.returnPct)) out.push('return % does not match equity');
+  return out;
+}
+
+function renderAccount() {
+  const a = A();
+  const card = $('#acCard');
+  if (!a) { $('#acRun').insertAdjacentHTML('beforebegin', errBox(['account'])); return; }
+  const set = (id, text, t) => { const el = $(id); el.textContent = text; if (t) el.classList.add(t); };
+  $('#acCount').textContent = `Trades ${nf0.format(a.trades ?? 0)} · skipped ${nf0.format(a.skipped ?? 0)}`;
+  set('#acOpening', amt2(a.opening));
+  $('#acOpeningS').textContent = a.openedOn ? `on ${fmtDateWd(a.openedOn)}` : '';
+  set('#acBalance', amt2(a.balance));
+  set('#acMargin', amt2(a.marginBlocked));
+  const ms = [Math.round((a.marginBlocked || 0) * 100) === 0 ? 'no open position' : 'blocked until the exit'];
+  if (a.lastMargin) ms.push(`last trade needed ${a.lastMargin.total == null ? 'an unmeasured margin' : amt2(a.lastMargin.total)} on ${fmtDateShort(a.lastMargin.date)}`);
+  $('#acMarginS').innerHTML = ms.map((s) => `<span class="ac-line">${esc(s)}</span>`).join('');
+  set('#acAvailable', amt2(a.available));
+  set('#acMtm', signed2(a.openMtm), tone2(a.openMtm));
+  set('#acEquity', amt2(a.equity));
+  set('#acReturn', pctSigned(a.returnPct), tone2(a.returnPct));
+  $('#acReturnS').textContent = a.openedOn ? `since ${fmtDateShort(a.openedOn)}` : '';
+  // No trade has needed a margin yet: the item is hidden, but keeps its box, so nothing under it moves (row 10).
+  const roomItem = $('#acRoomI');
+  if (a.room == null) {
+    roomItem.classList.add('ac-off');
+  } else {
+    set('#acRoom', signed2(a.room), tone2(a.room));
+    $('#acRoomS').textContent = Math.round(a.room * 100) < 0 ? 'the next trade is skipped while the margin is above the balance' : '';
+  }
+  const bad = accountProblems(a);
+  if (bad.length) $('#acRun').insertAdjacentHTML('beforebegin', `<div class="err" role="alert">data/account.json does not add up: ${bad.map(esc).join('; ')}. The figures are shown as published.</div>`);
+  card.dataset.ready = '1';
+}
+
+const LEG = (l) => `${l.contract} · sold ${p2(l.sell)} · bought ${l.buy == null ? 'open' : p2(l.buy)} · qty ${nf0.format(l.qty)}`;
+function ledgerRow(e) {
+  const k = ['open', 'trade', 'skip', 'none'].includes(e.kind) ? e.kind : 'none';
+  const legs = k === 'trade' && e.legs?.length ? e.legs.map((l) => `<span class="ac-leg">${esc(LEG(l))}</span>`).join('') : '';
+  const fill = e.fill === 'est'
+    ? '<span title="No bid or ask in the snapshot: the rule\'s LTP fill, 0.25 pt worse">fill est</span>'
+    : e.fill ? `fill ${esc(e.fill)}` : '';
+  const sub = k === 'trade'
+    ? [e.gross != null ? `gross <span class="mono">${signed2(e.gross)}</span>` : '', e.charges != null ? `charges <span class="mono">${rupees2(e.charges)}</span>` : '', fill].filter(Boolean)
+    : [];
+  // The opening credit is not a gain: it shows without a sign.
+  const amount = k === 'open' ? amt2(e.amount) : signed2(e.amount);
+  const amtTone = k === 'trade' ? tone2(e.amount) : 'quiet';
+  return `<tr class="k-${k}">
+    <td class="ac-d"><span class="mono" title="${esc(fmtDateWd(e.date))}">${esc(fmtDateWd(e.date))}</span></td>
+    <td class="ac-e"><span class="ac-t">${esc(dash(e.text))}</span>${legs}${sub.length ? `<span class="ac-s">${sub.join(' · ')}</span>` : ''}</td>
+    <td class="r mono ac-a ${amtTone}">${amount}</td>
+    <td class="r mono ac-b"><span class="ac-lbl" aria-hidden="true">Balance after </span>${amt2(e.balance)}</td>
+  </tr>`;
+}
+function renderLedger() {
+  const body = $('#acLedBody');
+  const a = A();
+  if (!a) { body.innerHTML = `<tr><td class="t-empty" colspan="4">${errBox(['account'])}</td></tr>`; return; }
+  const led = (a.ledger || []).map((e, i) => [e, i]);
+  if (!led.length) { body.innerHTML = '<tr><td class="t-empty" colspan="4">No ledger line yet.</td></tr>'; return; }
+  // Newest first; two lines of one date keep their file order reversed (the file is oldest first).
+  led.sort((x, y) => cmp(y[0].date, x[0].date) || y[1] - x[1]);
+  body.innerHTML = led.map(([e]) => ledgerRow(e)).join('');
+}
+
+// Test seam: ?now=YYYY-MM-DDTHH:MM (IST) replaces "now" for the runner line ONLY, so each of its states can be
+// checked at any hour (.cache/s15/verify-account.py). Everything else on the page keeps the real clock.
+function nowIST() {
+  const q = new URLSearchParams(window.location.search).get('now');
+  if (q && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(q)) return { date: q.slice(0, 10), hm: q.slice(11, 16) };
+  const s = new Date(Date.now() + 330 * 60000).toISOString(); // IST is UTC+05:30 all year
+  return { date: s.slice(0, 10), hm: s.slice(11, 16) };
+}
+const WHERE = { github: 'GitHub', pc: 'the PC' };
+const hhmm = (ts) => (ts ? String(ts).slice(11, 16) : '—'); // "YYYY-MM-DD HH:MM:SS" in IST
+function runnerLine() {
+  const now = nowIST();
+  const raw = state.data.runner;
+  // date null / status "none" is the file published before the first run: never ran. A missing file is the same.
+  const r = raw && raw.date && raw.status && raw.status !== 'none' ? raw : null;
+  const where = r ? (WHERE[r.where] || r.where || 'an unknown machine') : '';
+  const cmd = '<span class="mono">scripts/paper_nse.cmd</span>';
+  if (r && r.date === now.date) {
+    if (r.status === 'started') return { st: 'run', t: `Runner: started ${hhmm(r.startedAt)} on ${esc(where)} · the result appears at about 15:25`, s: '' };
+    if (r.status === 'done') return { st: 'ok', t: `Runner: done ${hhmm(r.updatedAt)} on ${esc(where)}`, s: esc(r.note || '') };
+    if (r.status === 'failed') return { st: 'warn', t: `Runner: failed at ${hhmm(r.updatedAt)} on ${esc(where)}. Start ${cmd} on the PC.`, s: esc(r.note || '') };
+    return { st: 'warn', t: `Runner: ${esc(r.status)} at ${hhmm(r.updatedAt)} on ${esc(where)}`, s: esc(r.note || '') };
+  }
+  const weekly = state.data.calendar?.weekly || [];
+  if (weekly.includes(now.date) && now.hm >= '09:20' && now.hm < '15:30') {
+    return { st: 'warn', t: `Runner: not started today. Double-click ${cmd} on the PC.`, s: '' };
+  }
+  const last = r ? `Last run: ${esc(fmtDateShort(r.date))}, ${esc(r.status)} on ${esc(where)}` : '';
+  const failedLoad = state.errors.runner && !/HTTP 404/.test(state.errors.runner) ? `Runner status unknown: ${esc(state.errors.runner)}` : '';
+  if (!state.data.calendar) return { st: 'next', t: 'Next run: unknown, data/calendar.json did not load', s: last || failedLoad };
+  // After 15:30 an expiry day without a run is over, so the next run is a later expiry.
+  const next = [...weekly].sort().find((d) => (now.hm >= '15:30' ? d > now.date : d >= now.date));
+  if (!next) return { st: 'next', t: 'Next run: no expiry day listed in data/calendar.json yet', s: last || failedLoad };
+  return { st: 'next', t: `Next run: ${WD[parseD(next).getUTCDay()]} ${fmtDateShort(next)}, starts on its own by 09:15 (GitHub)`, s: last || failedLoad };
+}
+function renderRunner() {
+  const x = runnerLine();
+  $('#acRun').dataset.st = x.st;
+  $('#acRunT').innerHTML = x.t;
+  $('#acRunS').innerHTML = x.s || '&nbsp;';
 }
 
 // ---------- Today's P&L strip (reference 9) ----------
@@ -509,6 +660,9 @@ async function boot() {
   setupTips();
   await loadAll();
   renderFreshness(state.data.meta);
+  safely(renderAccount, $('#acCard .ac-kv'));
+  safely(renderLedger, $('#acLedBody'));
+  safely(renderRunner, $('#acRunT'));
   safely(renderToday, $('#plToday'));
   safely(renderSummary, $('#plSum'));
   const ds = days();

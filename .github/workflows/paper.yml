@@ -1,0 +1,162 @@
+# MMES v3 weekly paper runner on GitHub (docs/spec/account-v1.md rows 6-7): no PC is needed.
+# GitHub starts scheduled runs late, and sometimes not at all (13 Nov 2026: the 16:30 update never started), so there
+# are four tries before the open. The first run to start takes the day; the later ones queue behind it (one
+# concurrency group) and then find data/runner.json already saying "started" or "done", and exit.
+name: paper
+on:
+  schedule:
+    - cron: '0 1 * * 1-5'       # 06:30 IST
+    - cron: '45 1 * * 1-5'      # 07:15 IST
+    - cron: '30 2 * * 1-5'      # 08:00 IST
+    - cron: '15 3 * * 1-5'      # 08:45 IST
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'live = the expiry-day run; dry = the loop on any trading day, nothing pushed; once = one chain fetch'
+        type: choice
+        options: [live, dry, once]
+        default: live
+      minutes:
+        description: 'dry only: stop after this many snapshots'
+        default: '5'
+  push:
+    branches: [s15-account]     # AC1: the first push of the S15 branch runs the probe job only (inert once merged)
+permissions:
+  contents: write
+concurrency:
+  group: paper
+  cancel-in-progress: false
+jobs:
+  # one chain fetch: can a GitHub server read NSE's option chain at all? (AC1)
+  probe:
+    if: github.event_name == 'push' || inputs.mode == 'once'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      # nseindia.com answers only a headed Chrome, so the browser runs under xvfb (as in update.yml)
+      - run: xvfb-run -a python -I scripts/paper_nse.py --once
+
+  # the full loop on any trading day, nothing pushed; its log and snapshots are kept as an artifact (AC2)
+  dry:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'dry'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: live
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: xvfb-run -a python -I scripts/paper_nse.py --dry --minutes ${{ inputs.minutes }}
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry
+          path: .cache/dry/
+          retention-days: 30
+          include-hidden-files: true
+
+  # is today an expiry day, and has nobody (GitHub or the PC) started it yet? If so, say so in data/runner.json.
+  start:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'live')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      run: ${{ steps.s.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: live
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - id: s
+        run: python -I scripts/paper_nse.py --gh-start
+
+  # the page shows "Runner: started hh:mm on GitHub" while the day runs
+  show-start:
+    needs: start
+    if: needs.start.outputs.run == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+
+  # 09:15 .. 11:55. GitHub stops a job at 6 h, and the earliest trigger starts at 06:30.
+  am:
+    needs: start
+    if: needs.start.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: live
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: xvfb-run -a python -I scripts/paper_nse.py --gh --until 11:55
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots-am
+          path: .cache/nse-snapshots/
+          retention-days: 30
+          include-hidden-files: true
+
+  # 11:56 .. 15:15, then the day is written, checked, committed, pushed. It also runs when the morning job failed:
+  # it resumes from whatever the morning uploaded, and the minutes it never saw are carried forward and counted.
+  pm:
+    needs: [start, am]
+    if: always() && needs.start.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350        # normally 11:56 .. 15:20; longer when the morning job died early and this one starts sooner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: live
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: snapshots-am
+          path: .cache/nse-snapshots/
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - run: xvfb-run -a python -I scripts/paper_nse.py --gh --push
+      - if: failure() || cancelled()
+        run: python -I scripts/paper_nse.py --gh-status failed
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots-day
+          path: .cache/nse-snapshots/
+          retention-days: 30
+          include-hidden-files: true
+
+  # publish the day (a push made with GITHUB_TOKEN does not start pages.yml by itself)
+  show-end:
+    needs: [start, pm]
+    if: always() && needs.start.outputs.run == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

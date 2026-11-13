@@ -346,8 +346,8 @@ def main():
     build_daily(idx_by)
     if not (DATA / 'paper-weekly.json').exists():
         update.write_json(DATA / 'paper-weekly.json', {'trades': [], 'note': (
-            "No weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on the owner's PC from NSE's "
-            'free option chain (scripts/paper_nse.py).')})
+            "No weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on GitHub on each expiry day "
+            "from NSE's free option chain (scripts/paper_nse.py); the owner's PC is the backup.")})
     if not update.HOL_FILE.exists() and SRC_HOL.exists():                   # seed the holidays the paper record can meet
         with open(SRC_HOL, encoding='utf-8') as fh:
             src_hol = json.load(fh)
