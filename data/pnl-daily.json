@@ -1,0 +1,237 @@
+{
+ "start": "2026-11-02",
+ "asOf": "2026-11-12",
+ "summary": {
+  "net": -21882.17,
+  "realized": -21680.75,
+  "charges": 136.42,
+  "slippage": 65.0,
+  "openMtm": 0.0,
+  "thisMonth": -21882.17,
+  "bestDay": {
+   "date": "2026-11-06",
+   "pnl": 8183.58
+  },
+  "worstDay": {
+   "date": "2026-11-05",
+   "pnl": -24358.75
+  },
+  "greenDays": 1,
+  "redDays": 4,
+  "flatDays": 3,
+  "days": 8,
+  "backtestPerTrade": {
+   "monthly": 5237.06,
+   "v3": 603.77,
+   "leg20": 555.15
+  }
+ },
+ "days": [
+  {
+   "date": "2026-11-02",
+   "nifty": {
+    "close": 23440.8,
+    "chg": 387.7
+   },
+   "monthly": {
+    "event": "entry",
+    "pnl": -32.5,
+    "value": 211.15
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": -32.5,
+   "cum": -32.5,
+   "open": 1,
+   "events": [
+    "Monthly: sold NIFTY 23 Nov 2026 24050 CE @ 75.85 + NIFTY 23 Nov 2026 22850 PE @ 135.30, credit 211.15, stop at CE + PE 422.30"
+   ]
+  },
+  {
+   "date": "2026-11-03",
+   "nifty": {
+    "close": 23810.85,
+    "chg": 370.05
+   },
+   "monthly": {
+    "event": "hold",
+    "pnl": -2619.5,
+    "value": 251.45
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": -2619.5,
+   "cum": -2652.0,
+   "open": 1,
+   "events": []
+  },
+  {
+   "date": "2026-11-04",
+   "nifty": {
+    "close": 23960.6,
+    "chg": 149.75
+   },
+   "monthly": {
+    "event": "hold",
+    "pnl": -3055.0,
+    "value": 298.45
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": -3055.0,
+   "cum": -5707.0,
+   "open": 1,
+   "events": []
+  },
+  {
+   "date": "2026-11-05",
+   "nifty": {
+    "close": 24536.6,
+    "chg": 576.0
+   },
+   "monthly": {
+    "event": "stop",
+    "pnl": -24358.75,
+    "value": 673.2
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": -24358.75,
+   "cum": -30065.75,
+   "open": 1,
+   "events": [
+    "Monthly: stop hit, CE + PE closed at 673.20 (stop 422.30); both are bought back at the next open"
+   ]
+  },
+  {
+   "date": "2026-11-06",
+   "nifty": {
+    "close": 25030.35,
+    "chg": 493.75
+   },
+   "monthly": {
+    "event": "exit",
+    "pnl": 8183.58,
+    "value": null
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": 8183.58,
+   "cum": -21882.17,
+   "open": 0,
+   "events": [
+    "Monthly: bought back at the open: CE @ 506.80 + PE @ 37.90; charges 136.42; trade net -₹21,882.17"
+   ]
+  },
+  {
+   "date": "2026-11-09",
+   "nifty": {
+    "close": 25044.65,
+    "chg": 14.3
+   },
+   "monthly": {
+    "event": "none",
+    "pnl": 0.0,
+    "value": null
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": 0.0,
+   "cum": -21882.17,
+   "open": 0,
+   "events": [
+    "No position"
+   ]
+  },
+  {
+   "date": "2026-11-11",
+   "nifty": {
+    "close": 25255.05,
+    "chg": 210.4
+   },
+   "monthly": {
+    "event": "none",
+    "pnl": 0.0,
+    "value": null
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": 0.0,
+   "cum": -21882.17,
+   "open": 0,
+   "events": [
+    "No position"
+   ]
+  },
+  {
+   "date": "2026-11-12",
+   "nifty": {
+    "close": 25299.35,
+    "chg": 44.3
+   },
+   "monthly": {
+    "event": "none",
+    "pnl": 0.0,
+    "value": null
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": 0.0,
+   "cum": -21882.17,
+   "open": 0,
+   "events": [
+    "No position"
+   ]
+  }
+ ],
+ "trades": [
+  {
+   "id": "monthly-2026-11",
+   "strategy": "monthly",
+   "entry": "2026-11-02",
+   "exit": "2026-11-06",
+   "status": "closed",
+   "source": "NSE bhavcopy close",
+   "legs": [
+    {
+     "contract": "NIFTY 23 Nov 2026 24050 CE",
+     "qty": 65,
+     "sell": 75.85,
+     "buy": 506.8,
+     "pnl": -28011.75,
+     "charges": 71.28
+    },
+    {
+     "contract": "NIFTY 23 Nov 2026 22850 PE",
+     "qty": 65,
+     "sell": 135.3,
+     "buy": 37.9,
+     "pnl": 6331.0,
+     "charges": 65.13
+    }
+   ],
+   "realized": -21680.75,
+   "charges": 136.42,
+   "slippage": 65.0,
+   "net": -21882.17,
+   "mtm": null
+  }
+ ],
+ "intraday": {}
+}

@@ -1,8 +1,10 @@
 /* MMES dashboard. Tokens are locked in docs/spec/dashboard-v1.md rows 6 and 6a. */
+/* Inter 400/500/600 are the fontsource latin files plus one glyph, ₹ (U+20B9), copied from the same family's
+   latin-ext file (OFL). Without it every ₹ on the page loaded a system fallback font. */
 
-@font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: swap; src: url("vendor/fonts/inter-latin-400-normal.woff2") format("woff2"); }
-@font-face { font-family: "Inter"; font-style: normal; font-weight: 500; font-display: swap; src: url("vendor/fonts/inter-latin-500-normal.woff2") format("woff2"); }
-@font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: swap; src: url("vendor/fonts/inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: swap; src: url("vendor/fonts/inter-latin-inr-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 500; font-display: swap; src: url("vendor/fonts/inter-latin-inr-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: swap; src: url("vendor/fonts/inter-latin-inr-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Inter"; font-style: normal; font-weight: 700; font-display: swap; src: url("vendor/fonts/inter-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("vendor/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("vendor/fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }
@@ -65,7 +67,9 @@
 
 :root {
   --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* JetBrains Mono has no ₹: it comes from Inter (whose files carry it, see the @font-face note), not from a
+     system font whose first load blocked the main thread for ~100 ms on a throttled phone (row 10). */
+  --font-num: "JetBrains Mono", "Inter", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s5: 40px; --s6: 48px; --s8: 64px;
   --radius: 12px;
   --radius-sm: 8px;
@@ -156,11 +160,21 @@ a { color: var(--accent); }
   transition: background-color var(--t) var(--ease), color var(--t) var(--ease);
 }
 .nav-list a:hover { color: var(--text); background: var(--inset); }
-.nav-list a[aria-current="true"] { color: var(--text); background: var(--accent-wash); }
+.nav-list a[aria-current="true"], .nav-list a[aria-current="page"] { color: var(--text); background: var(--accent-wash); }
 /* .btn sets display later in this file, so this needs the two-class selector to win. */
 .btn.menu-btn, .menu-btn[hidden] { display: none; }
 @media (max-width: 1080px) and (min-width: 821px) {
   .nav-list a { padding: 6px 7px; font-size: 13px; }
+}
+/* With the P&L link the nav needs ~45 px more: between 821 and 1023 px the name takes the two-line lockup
+   (as on phones) instead of being cut to "MMES · NIF…". */
+@media (max-width: 1023px) and (min-width: 821px) {
+  .brand-name { display: flex; flex-direction: column; line-height: 1.2; white-space: normal; }
+  .brand-name .brand-dot { display: none; }
+  .brand-name .b1 { font-size: 15px; }
+  .brand-name .b2 { font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-list { gap: 0; }
+  .nav-list a { padding: 6px; }
 }
 @media (max-width: 820px) {
   .btn.menu-btn { display: inline-flex; }
@@ -302,7 +316,20 @@ a { color: var(--accent); }
 .tk-s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-s.pos { color: var(--profit-text); }
 .tk-s.neg { color: var(--loss-text); }
-.skel-line { min-height: 64px; }
+/* Placeholders are the size of what replaces them (row 10: CLS), measured at 412 px and on wide screens. */
+.skel-line { min-height: 86px; }
+.sum.skel-sum:nth-child(1) { min-height: 132px; }
+.sum.skel-sum:nth-child(2) { min-height: 173px; }
+.sum.skel-sum:nth-child(3) { min-height: 190px; }
+@media (min-width: 700px) { .sum.skel-sum:nth-child(1) { min-height: 113px; } .sum.skel-sum:nth-child(3) { min-height: 170px; } }
+@media (min-width: 900px) { .sum.skel-sum:nth-child(n) { min-height: 230px; } }
+@media (min-width: 1100px) { .sum.skel-sum:nth-child(n) { min-height: 209px; } }
+@media (min-width: 1200px) { .sum.skel-sum:nth-child(n) { min-height: 188px; } }
+.today-grid .skel.t-paper-m { min-height: 769px; }
+.today-grid .skel:not(.t-paper-m) { min-height: 240px; }
+@media (min-width: 560px) { .today-grid .skel.t-paper-m { min-height: 525px; } .today-grid .skel:not(.t-paper-m) { min-height: 180px; } }
+@media (min-width: 821px) { .today-grid .skel.t-paper-m { min-height: 430px; } .today-grid .skel:not(.t-paper-m) { min-height: 196px; } }
+@media (min-width: 1101px) { .today-grid .skel.t-paper-m, .today-grid .skel:not(.t-paper-m) { min-height: 438px; } }
 @media (min-width: 821px) {
   .ticker { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .tk { border-bottom: 0; border-right: 1px solid var(--border); }
@@ -402,7 +429,7 @@ a { color: var(--accent); }
 }
 .notes li.amber::before {
   left: 12px; top: 11px; width: 14px; height: 14px; border-radius: 0;
-  content: "!"; font-weight: 700; font-size: 11px; line-height: 15px; text-align: center; color: var(--panel);
+  content: "!"; font-weight: 600; font-size: 11px; line-height: 15px; text-align: center; color: var(--panel);
   background: var(--warning); clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 .rules { position: relative; z-index: 2; margin-top: auto; }
@@ -733,4 +760,166 @@ th[aria-sort="ascending"] button, th[aria-sort="descending"] button { color: var
   .brand { min-height: 48px; }
   .scard-btn { display: inline-flex; align-items: center; min-height: 48px; }
   .money-input input { align-self: stretch; min-height: 46px; }
+}
+
+/* ---------- P&L page (docs/spec/pnl-v1.md rows 1-6). Every box has its final size before the data lands (row 10). */
+.pl-top { padding-top: var(--s3); }
+.pl-today {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s2); min-height: 72px;
+  padding: 12px var(--s3); margin-bottom: var(--s5);
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.pl-today-l, .pl-today-r { display: flex; flex-direction: column; min-width: 0; }
+.pl-today-r { align-items: flex-end; text-align: right; }
+.pl-today-t { font-weight: 600; font-size: 14px; line-height: 20px; white-space: nowrap; }
+.pl-today-d, .pl-today-c { font-size: 12px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pl-today-v { font-size: 22px; line-height: 30px; font-weight: 600; }
+@media (max-width: 700px) { .pl-today { padding: 12px var(--s2); margin-bottom: var(--s4); } }
+
+.pl-grid { display: grid; gap: var(--s2); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) {
+  .pl-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "sum cal" "tx day" "bars bars"; align-items: start; }
+  .pl-sum { grid-area: sum; }
+  .pl-cal { grid-area: cal; }
+  .pl-detail { grid-area: day; }
+  .pl-bars { grid-area: bars; }
+  .pl-tx { grid-area: tx; }
+}
+
+/* Summary card (owner's reference 7): one net figure, how it splits, then the day records. */
+.pl-sum { display: flex; flex-direction: column; gap: var(--s3); }
+.card.pl-sum:hover { transform: none; box-shadow: none; border-color: var(--border); }
+.pl-net { font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -.01em; margin-top: 4px; }
+@media (max-width: 400px) { .pl-net { font-size: 28px; } }
+.pl-sum-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); margin: 0; padding-top: var(--s2); border-top: 1px solid var(--border); }
+@media (min-width: 560px) { .pl-sum-row { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.pl-sum-row > div { min-width: 0; }
+.pl-sum-row dt, .pl-sum-row dd { margin: 0; }
+.pl-sum-row .kv-v { line-height: 24px; white-space: nowrap; }
+.pl-sum-row .kv-sub { line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-avg { padding-top: var(--s2); border-top: 1px solid var(--border); }
+.pl-avg-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pl-avg-t caption { text-align: left; margin-bottom: var(--s1); }
+.pl-avg-t th, .pl-avg-t td { padding: 6px 0; border-bottom: 1px solid var(--border); text-align: left; font-weight: 400; line-height: 20px; }
+.pl-avg-t thead th { font-size: 12px; color: var(--muted); font-weight: 500; }
+.pl-avg-t tbody th { color: var(--text); }
+.pl-avg-t .r { text-align: right; }
+.pl-avg-t td { font-family: var(--font-num); white-space: nowrap; }
+.pl-avg-t td .sub { font-family: var(--font-ui); font-size: 12px; margin-left: 6px; }
+.pl-avg-t tr:last-child th, .pl-avg-t tr:last-child td { border-bottom: 0; }
+
+/* Month calendar (reference 8). Six rows always, so the box never changes height between months. */
+.pl-cal { display: flex; flex-direction: column; gap: var(--s1); }
+.pl-cal-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s1); }
+.pl-cal-head h3 { font-size: 16px; line-height: 24px; text-align: center; flex: 1; }
+.pl-cal-head .btn { width: 36px; padding: 0; }
+.pl-cal-wd, .pl-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.pl-cal-wd span { font-size: 12px; line-height: 18px; color: var(--muted); text-align: center; }
+.pl-cal-grid { grid-template-rows: repeat(6, 56px); container-type: inline-size; }
+@media (min-width: 1100px) { .pl-cal-grid { grid-template-rows: repeat(6, 60px); } }
+.pl-d {
+  position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
+  min-width: 0; height: 100%; padding: 6px; border-radius: var(--radius-sm); border: 1px solid transparent;
+  font-size: 12px; line-height: 16px; color: var(--muted); background: transparent; text-align: left;
+}
+.pl-d .dn { font-family: var(--font-num); }
+.pl-d .dv { font-family: var(--font-num); font-weight: 600; color: var(--text); white-space: nowrap; max-width: 100%; overflow: hidden; }
+.pl-d .dv .w { display: none; }
+@media (max-width: 520px) { .pl-d { padding: 4px 3px; } .pl-d .dv { font-size: 10px; letter-spacing: -.02em; } .pl-cal-grid, .pl-cal-wd { gap: 3px; } }
+@container (min-width: 480px) { .pl-d .dv .w { display: inline; } .pl-d .dv .c { display: none; } }
+.pl-d.pad { visibility: hidden; }
+.pl-d.wkend, .pl-d.off, .pl-d.out { color: var(--faint); }
+.pl-d.off { border: 1px dashed var(--border-strong); }
+button.pl-d {
+  cursor: pointer; color: var(--text); background: var(--inset); font: inherit; font-size: 12px;
+  transition: border-color var(--t) var(--ease), transform var(--t) var(--ease);
+}
+/* Cell colour = day total, 10-45 % of the profit or loss token over --inset (row 6a scale). 45 % keeps the text >= 4.5:1. */
+button.pl-d.pos { background: color-mix(in srgb, var(--profit) var(--k), var(--inset)); }
+button.pl-d.neg { background: color-mix(in srgb, var(--loss) var(--k), var(--inset)); }
+button.pl-d:hover { border-color: var(--border-strong); }
+button.pl-d:active { transform: scale(.97); }
+button.pl-d[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+button.pl-d.today .dn::after { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-left: 4px; vertical-align: 2px; }
+.pl-cal-foot { font-size: 12px; line-height: 18px; color: var(--muted); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px var(--s2); }
+.pl-cal-foot .num { color: var(--text); }
+
+/* Day detail (reference 8, right phone). */
+.pl-detail { display: flex; flex-direction: column; gap: var(--s2); }
+.pl-detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s2); }
+.pl-detail-head h3 { font-size: 16px; line-height: 24px; }
+.pl-detail-head .kv-sub { line-height: 18px; }
+.pl-detail-v { font-size: 22px; line-height: 30px; font-weight: 600; }
+.pl-events { list-style: none; display: flex; flex-direction: column; gap: 6px; min-height: 40px; }
+.pl-events li { position: relative; padding: 8px 12px 8px 26px; border-radius: var(--radius-sm); background: var(--subtle); border: 1px solid var(--border); font-size: 13px; line-height: 20px; }
+:root[data-theme="light"] .pl-events li { background: var(--inset); }
+.pl-events li::before { content: ""; position: absolute; left: 12px; top: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--faint)); }
+.pl-events li.ev-stop { --c: var(--loss); }
+.pl-events li.ev-exit { --c: var(--muted); }
+.pl-events li.ev-entry { --c: var(--accent); }
+.pl-events li.quiet { color: var(--muted); }
+.pl-detail-kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px var(--s2); margin: 0; }
+@media (min-width: 560px) { .pl-detail-kv { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.pl-detail-kv > div { min-width: 0; }
+.pl-detail-kv dt, .pl-detail-kv dd { margin: 0; }
+.pl-detail-kv .kv-v { font-size: 14px; line-height: 22px; white-space: nowrap; }
+.pl-detail-kv .kv-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-day-chart { height: 260px; }
+.pl-chart-cap { font-size: 12px; line-height: 18px; color: var(--muted); margin-top: calc(-1 * var(--s1)); }
+.pl-bars-chart { height: 300px; }
+@media (max-width: 640px) { .pl-bars-chart { height: 260px; } }
+
+/* Transactions (reference 7): one card per trade, one block per leg. */
+.pl-tx { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+.pl-tx .panel-head.flush { padding: 0; }
+.pl-tx-list { display: flex; flex-direction: column; gap: var(--s2); }
+.pl-trade { display: flex; flex-direction: column; gap: 12px; }
+.card.pl-trade:hover { transform: none; box-shadow: none; border-color: var(--border); }
+.pl-trade-h { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s2); }
+.pl-trade-h h4 { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
+.pl-trade-h .r { text-align: right; flex: none; }
+.pl-trade-h .r .label { justify-content: flex-end; }
+.pl-trade-net { font-size: 18px; line-height: 26px; font-weight: 600; }
+.pl-leg { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.pl-leg-h { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s2); padding: 12px; }
+.pl-leg-h b { font-weight: 600; font-family: var(--font-num); font-size: 13px; line-height: 20px; }
+.pl-leg-h .r { text-align: right; flex: none; }
+.pl-leg-h .r .label { justify-content: flex-end; }
+.pl-leg-kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s1); padding: 10px 12px; margin: 0; background: var(--subtle); }
+:root[data-theme="light"] .pl-leg-kv { background: var(--inset); }
+.pl-leg-kv > div { min-width: 0; }
+.pl-leg-kv dt, .pl-leg-kv dd { margin: 0; }
+.pl-leg-kv dd { font-family: var(--font-num); font-size: 13px; line-height: 20px; white-space: nowrap; }
+.pl-leg-kv > div:nth-child(2) { text-align: center; }
+.pl-leg-kv > div:nth-child(2) .label { justify-content: center; }
+.pl-leg-kv > div:nth-child(3) { text-align: right; }
+.pl-leg-kv > div:nth-child(3) .label { justify-content: flex-end; }
+.pl-leg-f { display: flex; justify-content: space-between; gap: var(--s2); padding: 8px 12px; font-size: 12px; color: var(--muted); }
+.pl-leg-f b { color: var(--text); font-weight: 500; }
+.pl-leg-f .mono { color: var(--text); }
+.pl-trade-f { font-size: 12px; line-height: 18px; color: var(--muted); }
+.pl-trade-f .num { color: var(--text); }
+
+/* Daily table */
+.pl-table .th { display: block; padding: 10px 12px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.pl-table th.r .th { text-align: right; }
+.pl-table td .sub { display: block; font-size: 12px; line-height: 16px; }
+.pl-table td.wk .sub { display: inline; }
+.pl-table td .sub.pos { color: var(--profit-text); }
+.pl-table td .sub.neg { color: var(--loss-text); }
+.pl-detail .chart-msg p { max-width: 420px; }
+.pl-table tr.sel td { background: var(--accent-wash); }
+.pl-table .ev { display: inline-flex; align-items: center; gap: 6px; }
+.pl-table .ev::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex: none; }
+.pl-table .ev.stop::before { background: var(--loss); }
+.pl-table .ev.entry::before { background: var(--accent); }
+.pl-table .ev.hold::before { background: var(--profit); }
+.pl-table .ev.exit::before { background: var(--muted); }
+.pl-table .ev.none { color: var(--muted); }
+.pl-src { list-style: none; display: flex; flex-direction: column; gap: var(--s1); max-width: 860px; }
+.pl-src li { padding: 12px var(--s2); border-radius: var(--radius-sm); background: var(--panel); border: 1px solid var(--border); color: var(--muted); }
+.pl-src li b { color: var(--text); font-weight: 600; }
+@media (max-width: 700px) {
+  .pl-cal-head .btn { width: 48px; }
+  .pl-table td { height: auto; padding-block: 8px; }
 }

@@ -8,9 +8,12 @@
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#07090D">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="preload" href="vendor/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="vendor/fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/inter-latin-inr-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/inter-latin-inr-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/inter-latin-inr-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/jetbrains-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/jetbrains-mono-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="modulepreload" href="common.js">
 <script>
   // Set the theme before the first paint, so a light-theme visitor never sees a dark flash.
   (function () {
@@ -49,6 +52,7 @@
         <li><a href="#months">Months</a></li>
         <li><a href="#trades">Trades</a></li>
         <li><a href="#how">How it works</a></li>
+        <li><a href="pnl.html">P&amp;L</a></li>
       </ul>
     </nav>
     <button class="btn btn-ghost icon-btn" type="button" id="themeBtn" aria-label="Switch to light theme">
@@ -62,13 +66,13 @@
 
   <section id="today" class="sec" aria-labelledby="h-today">
     <div class="ticker" id="ticker" role="group" aria-label="Summary">
-      <div class="tk skel-line"></div><div class="tk skel-line"></div><div class="tk skel-line"></div><div class="tk skel-line"></div><div class="tk skel-line"></div>
+      <div class="tk skel-line"></div><div class="tk skel-line"></div><div class="tk skel-line"></div><div class="tk skel-line"></div>
     </div>
     <div class="sec-head">
       <h2 id="h-today">Today</h2>
       <p class="sec-sub">Is it making money, what is open, and what happens next.</p>
     </div>
-    <div class="sumrow" id="summary"></div>
+    <div class="sumrow" id="summary"><div class="sum skel-sum" aria-hidden="true"></div><div class="sum skel-sum" aria-hidden="true"></div><div class="sum skel-sum" aria-hidden="true"></div></div>
     <div class="today-grid" id="todayBody">
       <div class="card skel t-paper-m" aria-hidden="true"></div>
       <div class="card skel" aria-hidden="true"></div>

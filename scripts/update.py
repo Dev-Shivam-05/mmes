@@ -1,5 +1,5 @@
 """Daily job: fetch NSE's F&O bhavcopy for the new weekdays, then rebuild the forward monthly paper record, the expiry
-calendar and meta.json. Runs in GitHub Actions (update.yml, ubuntu + xvfb) and locally:
+calendar, meta.json and the daily paper P&L (data/pnl-daily.json, scripts/pnl.py). Runs in GitHub Actions (update.yml, ubuntu + xvfb) and locally:
 
     python -I scripts/update.py
 
@@ -430,6 +430,9 @@ def main():
         log(f'FETCH FAILED: {failure}. Old data kept; the page will show stale.')
     try:
         paper = rebuild(today, job_ran=True, failed=bool(failure))
+        # the daily P&L is built once while every bhavcopy file is still on disk, so a month that prune() is about to
+        # delete is frozen into pnl-daily.json first (pnl.py copies a pruned closed month from the previous file)
+        rebuild_pnl()
         prune(paper, today)
     except Exception as e:
         log(f'REBUILD FAILED: {type(e).__name__}: {str(e)[:200]}')
@@ -438,7 +441,18 @@ def main():
         update_daily(datetime.now(mc.IST))
     except Exception as e:                                        # never let the chart's extra data fail the job
         log(f'nifty-daily: FAILED ({type(e).__name__}: {str(e)[:120]}); old file kept')
+    rebuild_pnl()                                                 # again, with the NIFTY close Yahoo just appended
     return 0
+
+
+def rebuild_pnl():
+    """data/pnl-daily.json (docs/spec/pnl-v1.md row 7). A failure keeps the old file and is logged; check.py, which
+    runs next in the workflow, then fails on the missing day, so the job goes red instead of silently stale."""
+    try:
+        import pnl                                                # here, not at the top: pnl imports this module
+        pnl.build(log=log)
+    except Exception as e:
+        log(f'PNL FAILED: {type(e).__name__}: {str(e)[:200]}; old pnl-daily.json kept')
 
 
 if __name__ == '__main__':

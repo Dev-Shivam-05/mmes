@@ -10,6 +10,12 @@
       strikes and exit times equal to the trade rows; nifty-daily and paper-legs well formed. Three random trade days
       and three random index days are rebuilt from the raw source files (SKIP where absent) and must match exactly;
       so must every Yahoo day of the saved Yahoo file and every paper-legs candle whose bhavcopy is still in data/bhav.
+  (f) pnl-daily (docs/spec/pnl-v1.md): no missing trading day, total = the sum of its parts, cum = the running sum,
+      every closed trade's day rows add up to its net, the trade nets from their legs, the monthly marks re-read from
+      data/bhav, the summary recomputed, the weekly paper rows' arithmetic. Written apart from pnl.py.
+  (g) rules regression (AC4): mmes_rules.py over the 143 archive days must equal replay-v3.csv (v3) and
+      leg-sl-days.csv (LEG-20), 143/143, net within Rs 0.01, the same exit times; and cut at every 13th minute it may
+      never decide differently. Needs the source archive; prints SKIP where it is absent (CI).
   (c) privacy grep over every file in the repo except .git/
 """
 import gzip
@@ -56,6 +62,7 @@ KEYS = {
     'paper-weekly.json': ['trades', 'note'],
     'nifty-daily.json': ['source', 'candles'],
     'paper-legs.json': ['month', 'ceK', 'peK', 'ce', 'pe'],
+    'pnl-daily.json': ['start', 'asOf', 'summary', 'days', 'trades', 'intraday'],
 }
 STRAT_KEYS = ['id', 'name', 'tagline', 'kind', 'rules', 'kpi', 'notes', 'equity', 'months']
 KPI_KEYS = ['trades', 'winPct', 'net', 'net50', 'perYear', 'worst', 'worstUnit', 'maxDD', 'capitalMin', 'capitalSafe', 'marginPeak']
@@ -263,8 +270,8 @@ def check_kpis(got):
     if abs(fwd - 120_354) > 1:
         fail(f'(a) forward-centred monthly net is {fwd}, the note says 1,20,354')
     pw = got['paper-weekly.json']
-    if not pw['trades'] and pw['note'] != ('No live paper trade yet. The first possible day is Tue 17 Nov 2026; it needs a new '
-                                           'Dhan token and the Data API plan.'):
+    if not pw['trades'] and pw['note'] != ('No weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on '
+                                           "the owner's PC from NSE's free option chain (scripts/paper_nse.py)."):
         fail('(d) paper-weekly note is not the contract\'s empty-ledger note')
     if len(FAILS) == n0:
         ok('(a) every card KPI equals its recomputation (Rs 1) and the contract\'s expected values')
@@ -482,6 +489,255 @@ def check_candles(got):
         ok('(e) candles')
 
 
+# ------------------------------------------------------------------------------------------------ (f) pnl-daily
+LOT_ = 65
+FILL = 0.25 * LOT_                      # Rs per fill (contract: 0.25 pt per leg per side)
+EVENTS = {'entry', 'hold', 'stop', 'exit', 'none'}
+WROW_KEYS = ['date', 'strategy', 'source', 'spot', 'W', 'ceK', 'peK', 'ceIn', 'peIn', 'ceOut', 'peOut', 'ceExit', 'peExit',
+             'why', 'pts', 'charges', 'net', 'slip', 'est', 'minutes']
+
+
+def brokerage(d, buy, sell):
+    """The backtest's charges(), restated here (mmes-core.ts): STT 0.15% of the sell side from 2026-04-01, else 0.1%."""
+    stt = 0.0015 if d >= '2026-04-01' else 0.001
+    turnover = buy + sell
+    exch, sebi = 0.0003503 * turnover, 0.000001 * turnover
+    return 40 + stt * sell + exch + sebi + 0.00003 * buy + 0.18 * (40 + exch + sebi)
+
+
+def near(a, b, tol):
+    return a is not None and b is not None and abs(a - b) <= tol
+
+
+def leg_closes(bhav_dir, expiry, ce_k, pe_k, d0, d1):
+    """{date: (CE close, PE close)} straight from the bhavcopy rows (None where the contract has no row that day)."""
+    out = {}
+    for f in sorted(bhav_dir.glob('*.json.gz')):
+        d = f.name[:10]
+        if not (d0 <= d <= d1):
+            continue
+        ce = pe = None
+        for r in json.load(gzip.open(f, 'rt', encoding='utf-8'))['rows']:
+            if r[0] == expiry and r[2] == 'CE' and r[1] == ce_k:
+                ce = r[6]
+            elif r[0] == expiry and r[2] == 'PE' and r[1] == pe_k:
+                pe = r[6]
+        out[d] = (ce, pe)
+    return out
+
+
+def check_pnl(p=None, weekly=None, strict_days=True):
+    """(f). Returns the list of problems (main() reports them through fail()). paper_nse.py --dry / --sim call it on
+    their own outputs under .cache/."""
+    probs = []
+    bad = probs.append
+    p = p if p is not None else load('pnl-daily.json')
+    weekly = weekly if weekly is not None else load('paper-weekly.json')
+    pm = load('paper-monthly.json')
+    hol = set(load('holidays.json')) if (DATA / 'holidays.json').exists() else set()
+    start, as_of, days = p['start'], p['asOf'], p['days']
+    dates = [d['date'] for d in days]
+    if start != '2026-11-02':
+        bad(f'start is {start}, the contract says 2026-11-02')
+    if dates != sorted(set(dates)):
+        bad('days are not in strictly increasing date order')
+    if dates and (dates[0] < start or dates[-1] != as_of):
+        bad(f'days run {dates[0]} .. {dates[-1]}, start {start}, asOf {as_of}')
+    for d in dates:
+        if date.fromisoformat(d).weekday() >= 5 or d in hol:
+            bad(f'{d}: a weekend or an NSE holiday has a row')
+    # no missing trading day: every bhavcopy day, every weekly paper day, and every weekday that is not a recorded
+    # holiday from the start to the newest bhavcopy
+    bhav = sorted(f.name[:10] for f in (DATA / 'bhav').glob('*.json.gz'))
+    wdates = {r['date'] for r in weekly.get('trades', [])
+              if r.get('strategy') in ('v3', 'leg20') and (r.get('date') or '') >= start}
+    want_days = {d for d in bhav if d >= start} | wdates
+    if strict_days and bhav:
+        x = date.fromisoformat(start)
+        while x.isoformat() <= bhav[-1]:
+            if x.weekday() < 5 and x.isoformat() not in hol:
+                want_days.add(x.isoformat())
+            x += timedelta(days=1)
+    miss = sorted(want_days - set(dates))
+    if miss:
+        bad(f'missing trading days: {miss}')
+    # each row's arithmetic
+    run = 0.0
+    for d in days:
+        mo, wk = d['monthly'], d['weekly']
+        if mo.get('event') not in EVENTS:
+            bad(f"{d['date']}: monthly event {mo.get('event')}")
+        if set(wk) != {'v3', 'leg20'}:
+            bad(f"{d['date']}: weekly keys {sorted(wk)}")
+        parts = mo['pnl'] + sum(c['pnl'] for c in wk.values() if c)
+        if not near(parts, d['total'], 0.005):
+            bad(f"{d['date']}: total {d['total']} vs monthly + weekly {parts:.2f}")
+        run += d['total']
+        if not near(run, d['cum'], 0.01):
+            bad(f"{d['date']}: cum {d['cum']} vs the running sum {run:.2f}")
+        if mo['event'] == 'none' and (mo['pnl'] != 0 or mo['value'] is not None):
+            bad(f"{d['date']}: no monthly position but pnl {mo['pnl']} / value {mo['value']}")
+    by_date = {d['date']: d for d in days}
+    trades = p['trades']
+    for d in days:
+        n = sum(1 for t in trades if t['strategy'] == 'monthly' and t['entry'] <= d['date']
+                and (t['exit'] is None or d['date'] < t['exit']))
+        if n != d['open']:
+            bad(f"{d['date']}: open {d['open']} vs {n} monthly trade(s) open at the close")
+    # the trades, from their legs
+    for t in trades:
+        tid, q = t['id'], (t['legs'][0]['qty'] if t['legs'] else LOT_)
+        if t['status'] == 'closed':
+            gross = sum((lg['sell'] - lg['buy']) * lg['qty'] for lg in t['legs'])
+            ch = sum(brokerage(t['entry'], lg['buy'] * lg['qty'], lg['sell'] * lg['qty']) for lg in t['legs'])
+            for lg in t['legs']:
+                if not near(lg['pnl'], (lg['sell'] - lg['buy']) * lg['qty'], 0.005) or \
+                        not near(lg['charges'], brokerage(t['entry'], lg['buy'] * lg['qty'], lg['sell'] * lg['qty']), 0.005):
+                    bad(f"{tid} {lg['contract']}: leg pnl / charges do not recompute")
+            if not near(t['realized'], gross, 0.011) or not near(t['charges'], ch, 0.011) or \
+                    not near(t['slippage'], 4 * 0.25 * q, 0.001) or \
+                    not near(t['net'], gross - ch - 4 * 0.25 * q, 0.011) or t['mtm'] is not None:
+                bad(f"{tid}: realized {t['realized']} charges {t['charges']} slippage {t['slippage']} net {t['net']} vs "
+                    f"legs {gross:.2f} / {ch:.2f} / net {gross - ch - 4 * 0.25 * q:.2f}")
+            if t['strategy'] == 'monthly':
+                rows = [by_date[x]['monthly']['pnl'] for x in by_date if t['entry'] <= x <= t['exit']]
+            else:
+                c = by_date.get(t['entry'], {}).get('weekly', {}).get(t['strategy'])
+                rows = [c['pnl']] if c else []
+            if not rows or not near(sum(rows), t['net'], 0.011):
+                bad(f"{tid}: its day rows sum to {sum(rows):.2f}, its net is {t['net']}")
+        elif t['realized'] is not None or t['net'] is not None or t['mtm'] is None or \
+                not near(t['slippage'], 2 * 0.25 * q, 0.001):
+            bad(f'{tid}: an open trade must carry mtm and 2 fills of slippage, no realized / net')
+    # the monthly trades against paper-monthly.json and the bhavcopy closes
+    for m in pm['months']:
+        if m['status'] not in ('open', 'closed'):
+            continue
+        t = next((x for x in trades if x['id'] == f"monthly-{m['month']}"), None)
+        if not t:
+            bad(f"paper month {m['month']}: no trade in pnl-daily")
+            continue
+        ce, pe = t['legs']
+        if (ce['sell'], pe['sell']) != (m['ceIn'], m['peIn']) or not ce['contract'].endswith(f" {m['ceK']} CE") or \
+                not pe['contract'].endswith(f" {m['peK']} PE") or t['entry'] != m['entry'] or t['status'] != m['status']:
+            bad(f"{t['id']}: legs / entry / status differ from paper-monthly.json")
+        if m['status'] == 'closed' and ((ce['buy'], pe['buy']) != (m['exit']['ce'], m['exit']['pe'])
+                                        or t['exit'] != m['exit']['date'] or not near(t['net'], m['net'], 0.005)):
+            bad(f"{t['id']}: exit / net differ from paper-monthly.json")
+        if not (DATA / 'bhav' / f"{m['entry']}.json.gz").exists():
+            continue                                   # pruned: the frozen rows were checked above
+        credit = m['ceIn'] + m['peIn']
+        end = m['exit']['date'] if m['status'] == 'closed' else m['last']['date']
+        closes = leg_closes(DATA / 'bhav', m['expiry'], m['ceK'], m['peK'], m['entry'], end)
+        lc, lp, prev = m['ceIn'], m['peIn'], credit
+        for x in sorted(closes):
+            cell = by_date.get(x, {}).get('monthly')
+            if cell is None:
+                bad(f"{t['id']}: no row on {x}")
+                continue
+            if x == m['entry']:
+                if cell['event'] != 'entry' or not near(cell['pnl'], -2 * FILL, 0.005) or not near(cell['value'], credit, 0.005):
+                    bad(f"{t['id']} {x}: entry row {cell}")
+                continue
+            if m['status'] == 'closed' and x == m['exit']['date']:
+                want = (prev - m['exit']['ce'] - m['exit']['pe']) * LOT_ - t['charges'] - 2 * FILL
+                if cell['event'] != 'exit' or not near(cell['pnl'], want, 0.02):
+                    bad(f"{t['id']} {x}: exit row {cell}, expected pnl {want:.2f}")
+                continue
+            c, q_ = closes[x]
+            lc = c if c is not None else lc
+            lp = q_ if q_ is not None else lp
+            val = lc + lp
+            ev = 'stop' if m.get('trigger') and x == m['trigger']['date'] else 'hold'
+            if cell['event'] != ev or not near(cell['value'], val, 0.005) or not near(cell['pnl'], (prev - val) * LOT_, 0.005):
+                bad(f"{t['id']} {x}: row {cell}, expected {ev} value {val:.2f} pnl {(prev - val) * LOT_:.2f}")
+            prev = val
+        if m['status'] == 'open' and not near(t['mtm'], (credit - prev) * LOT_, 0.01):
+            bad(f"{t['id']}: mtm {t['mtm']} vs {(credit - prev) * LOT_:.2f} from the bhavcopy")
+    # the summary, from the rows
+    sm, tot = p['summary'], [d['total'] for d in days]
+    closed = [t for t in trades if t['status'] == 'closed']
+    want = {'net': sum(tot), 'realized': sum(t['realized'] for t in closed), 'charges': sum(t['charges'] for t in closed),
+            'slippage': sum(t['slippage'] for t in trades),
+            'openMtm': sum(t['mtm'] for t in trades if t['status'] == 'open'),
+            'thisMonth': sum(d['total'] for d in days if d['date'][:7] == as_of[:7]),
+            'greenDays': sum(v > 0 for v in tot), 'redDays': sum(v < 0 for v in tot), 'flatDays': sum(v == 0 for v in tot),
+            'days': len(tot)}
+    for k, v in want.items():
+        if not near(sm.get(k), v, 0.011):
+            bad(f'summary.{k}: {sm.get(k)} vs recomputed {v}')
+    if days and (sm['bestDay']['pnl'] != max(tot) or sm['worstDay']['pnl'] != min(tot)
+                 or by_date[sm['bestDay']['date']]['total'] != max(tot)
+                 or by_date[sm['worstDay']['date']]['total'] != min(tot)):
+        bad(f"summary best / worst day {sm['bestDay']} / {sm['worstDay']} vs {max(tot)} / {min(tot)}")
+    if not near(sm['net'], sm['realized'] - sm['charges'] - sm['slippage'] + sm['openMtm'], 0.02):
+        bad('summary: net != realized - charges - slippage + openMtm')
+    if dates and not near(sm['net'], days[-1]['cum'], 0.011):
+        bad(f"summary.net {sm['net']} vs the last cum {days[-1]['cum']}")
+    kpi = {s_['id']: s_['kpi'] for s_ in load('strategies.json')['strategies']}
+    for k in ('monthly', 'v3', 'leg20'):
+        if not near(sm['backtestPerTrade'].get(k), kpi[k]['net'] / kpi[k]['trades'], 0.006):
+            bad(f"summary.backtestPerTrade.{k}: {sm['backtestPerTrade'].get(k)} vs {kpi[k]['net'] / kpi[k]['trades']:.2f}")
+    # the weekly paper rows and their minute lines
+    for r in [r for r in weekly.get('trades', []) if r.get('strategy') in ('v3', 'leg20')]:
+        miss_k = [k for k in WROW_KEYS if k not in r]
+        if miss_k:
+            bad(f"paper-weekly {r.get('date')} {r.get('strategy')}: missing {miss_k}")
+            continue
+        if r['source'] != 'NSE snapshot' or not (0 <= r['est'] and 0 <= r['minutes'] and r['est'] + r['minutes'] <= 361):
+            bad(f"paper-weekly {r['date']} {r['strategy']}: source {r['source']}, est {r['est']}, minutes {r['minutes']}")
+        if r['slip'] is None:
+            continue                                   # a skipped day: no position
+        pts = r['ceIn'] - r['ceOut'] + r['peIn'] - r['peOut']
+        ch = brokerage(r['date'], r['ceOut'] * LOT_, r['ceIn'] * LOT_) + brokerage(r['date'], r['peOut'] * LOT_, r['peIn'] * LOT_)
+        if not near(r['pts'], pts, 0.006) or not near(r['charges'], ch, 0.006) or \
+                not near(r['net'], pts * LOT_ - ch, 0.011) or not near(r['slip'], pts * LOT_ - ch - 4 * FILL, 0.011):
+            bad(f"paper-weekly {r['date']} {r['strategy']}: pts / charges / net / slip do not recompute")
+    for d, line in p['intraday'].items():
+        if d not in wdates:
+            bad(f'intraday {d}: not a weekly paper day')
+        n = len(line['t'])
+        if n == 0 or any(len(line[k]) != n for k in ('v3', 'leg20')) or line['t'] != sorted(line['t']):
+            bad(f'intraday {d}: series lengths or times')
+            continue
+        tot_ = [(a or 0) + (b or 0) for a, b in zip(line['v3'], line['leg20'])]
+        if not near(line['high'], max(tot_), 0.006) or not near(line['low'], min(tot_), 0.006):
+            bad(f'intraday {d}: high / low {line["high"]} / {line["low"]} vs {max(tot_):.2f} / {min(tot_):.2f}')
+        for sid in ('v3', 'leg20'):
+            t = next((x for x in trades if x['id'] == f'{sid}-{d}'), None)
+            if t and not near(line[sid][-1], t['net'], 0.011):
+                bad(f'intraday {d} {sid}: the line ends at {line[sid][-1]}, the trade net is {t["net"]}')
+    return probs
+
+
+def report_pnl(got):
+    probs = check_pnl(got['pnl-daily.json'], got['paper-weekly.json'])
+    for x in probs:
+        fail(f'(f) {x}')
+    p = got['pnl-daily.json']
+    if not probs:
+        mt = [t for t in p['trades'] if t['strategy'] == 'monthly' and t['status'] == 'closed']
+        ok(f"(f) pnl-daily: {len(p['days'])} days {p['days'][0]['date']} .. {p['asOf']}, none missing; totals, cum, "
+           f"summary and {len(p['trades'])} trade(s) recompute; closed monthly day rows = net: "
+           + ', '.join(f"{t['id']} {t['net']}" for t in mt))
+
+
+# ------------------------------------------------------------------------------------------------ (g) rules
+def check_rules():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import mmes_rules
+    res = mmes_rules.regress(cut_every=13, log=lambda s: print(f'     {s}'))
+    if res is None:
+        print('SKIP (g) rules regression: the source archive is not on this machine')
+        return
+    a, b, n, nl, probs = res
+    if not (a == n == b == nl == 143) or probs:
+        fail(f'(g) rules regression: v3 {a}/{n}, LEG-20 {b}/{nl}, {len(probs)} problem(s)')
+    else:
+        ok(f'(g) rules regression: v3 {a}/{n} = replay-v3.csv, LEG-20 {b}/{nl} = leg-sl-days.csv, and no decision '
+           f'changes when the day is cut at every 13th minute')
+
+
 # ------------------------------------------------------------------------------------------------ (c) privacy
 # Built with join() at run time so that neither this file nor a compiled copy of it contains the literals.
 TOKENS = [''.join(p).lower() for p in (('Man', 'oj'), ('DHA', 'N_'), ('11035', '75055'), ('access', '-token'))]
@@ -537,6 +793,14 @@ def main():
             check_candles(got)
         except Exception as e:
             fail(f'(e) crashed: {type(e).__name__}: {e}')
+        try:
+            report_pnl(got)
+        except Exception as e:
+            fail(f'(f) crashed: {type(e).__name__}: {e}')
+    try:
+        check_rules()
+    except Exception as e:
+        fail(f'(g) crashed: {type(e).__name__}: {e}')
     check_privacy()
     print(f"{'FAILED: ' + str(len(FAILS)) + ' problem(s)' if FAILS else 'ALL CHECKS PASSED'}")
     return 1 if FAILS else 0

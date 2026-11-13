@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily paper P&amp;L · MMES · NIFTY expiry strangle</title>
+<meta name="description" content="Day-by-day paper profit and loss of the MMES NIFTY strangle: every NSE trading day since the first paper trade, with a calendar, a day view and every leg.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#07090D">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="vendor/fonts/inter-latin-inr-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/inter-latin-inr-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/inter-latin-inr-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/jetbrains-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/jetbrains-mono-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="modulepreload" href="common.js">
+<script>
+  // Set the theme before the first paint, so a light-theme visitor never sees a dark flash.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('mmes-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') {
+      t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="pnl.js"></script>
+</head>
+<body class="pl-page">
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="stale" id="staleBanner" role="status" hidden></div>
+
+<header class="topbar" id="top">
+  <div class="wrap topbar-in">
+    <a class="brand" href="index.html">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="8"/><path d="M5 22.5 11.5 11h9L27 22.5"/></svg>
+      <h1 class="brand-name"><span class="b1">MMES</span> <span class="brand-dot">·</span> <span class="b2">NIFTY expiry strangle</span></h1>
+    </a>
+    <nav class="nav" aria-label="Pages">
+      <button class="btn btn-ghost menu-btn" type="button" id="menuBtn" aria-expanded="false" aria-controls="navList">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+        <span class="menu-txt">Menu</span>
+      </button>
+      <ul class="nav-list" id="navList">
+        <li><a href="index.html#today">Today</a></li>
+        <li><a href="index.html#strategies">Strategies</a></li>
+        <li><a href="index.html#performance">Performance</a></li>
+        <li><a href="index.html#capital">Capital</a></li>
+        <li><a href="index.html#months">Months</a></li>
+        <li><a href="index.html#trades">Trades</a></li>
+        <li><a href="index.html#how">How it works</a></li>
+        <li><a href="pnl.html" aria-current="page">P&amp;L</a></li>
+      </ul>
+    </nav>
+    <button class="btn btn-ghost icon-btn" type="button" id="themeBtn" aria-label="Switch to light theme">
+      <svg class="i-sun" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="3.5"/><path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M4.2 15.8l1.7-1.7M14.1 5.9l1.7-1.7"/></svg>
+      <svg class="i-moon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 12.6A7 7 0 0 1 7.4 3.5a7 7 0 1 0 9.1 9.1Z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+  <section id="pnl" class="sec pl-top" aria-labelledby="h-pnl">
+    <!-- Every box below is drawn at its final size before the data arrives (spec row 10: CLS <= 0.1). -->
+    <div class="pl-today" id="plToday" aria-live="polite">
+      <div class="pl-today-l"><span class="pl-today-t" id="plTodayT">Today's P&amp;L</span><span class="pl-today-d" id="plTodayD">&nbsp;</span></div>
+      <div class="pl-today-r"><span class="pl-today-v num" id="plTodayV">—</span><span class="pl-today-c" id="plTodayC">&nbsp;</span></div>
+    </div>
+
+    <div class="sec-head">
+      <h2 id="h-pnl">Daily paper P&amp;L</h2>
+      <p class="sec-sub" id="plSub">One row per NSE trading day since the first paper trade. These are paper trades, not real orders.</p>
+    </div>
+
+    <div class="pl-grid">
+      <div class="card glow pl-sum" id="plSum">
+        <div class="pl-sum-top">
+          <div class="label">Net paper P&amp;L <span data-info="net"></span></div>
+          <div class="pl-net num" id="sNet">—</div>
+          <div class="kv-sub" id="sSpan">&nbsp;</div>
+        </div>
+        <dl class="pl-sum-row">
+          <div><dt class="label">Realised <span data-info="realized"></span></dt><dd class="kv-v num" id="sReal">—</dd></div>
+          <div><dt class="label">Charges <span data-info="charges"></span></dt><dd class="kv-v num" id="sChg">—</dd></div>
+          <div><dt class="label">Slippage <span data-info="slippage"></span></dt><dd class="kv-v num" id="sSlip">—</dd></div>
+          <div><dt class="label">Open MTM <span data-info="openMtm"></span></dt><dd class="kv-v num" id="sOpen">—</dd></div>
+        </dl>
+        <dl class="pl-sum-row">
+          <div><dt class="label">This month <span data-info="thisMonth"></span></dt><dd class="kv-v num" id="sMonth">—</dd><dd class="kv-sub" id="sMonthL">&nbsp;</dd></div>
+          <div><dt class="label">Best day <span data-info="bestDay"></span></dt><dd class="kv-v num" id="sBest">—</dd><dd class="kv-sub" id="sBestD">&nbsp;</dd></div>
+          <div><dt class="label">Worst day <span data-info="worstDay"></span></dt><dd class="kv-v num" id="sWorst">—</dd><dd class="kv-sub" id="sWorstD">&nbsp;</dd></div>
+          <div><dt class="label">Green days <span data-info="greenDays"></span></dt><dd class="kv-v num" id="sGreen">—</dd><dd class="kv-sub" id="sGreenD">&nbsp;</dd></div>
+        </dl>
+        <div class="pl-avg">
+          <table class="pl-avg-t">
+            <caption><span class="label">Average per trade, paper beside the backtest <span data-info="avg"></span></span></caption>
+            <thead><tr><th scope="col">Strategy</th><th scope="col" class="r">Paper</th><th scope="col" class="r">Backtest</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Monthly</th><td class="r" id="aPmonthly">—</td><td class="r num" id="aBmonthly">—</td></tr>
+              <tr><th scope="row">Weekly v3</th><td class="r" id="aPv3">—</td><td class="r num" id="aBv3">—</td></tr>
+              <tr><th scope="row">Weekly LEG-20</th><td class="r" id="aPleg20">—</td><td class="r num" id="aBleg20">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel pl-cal" id="plCal">
+        <div class="pl-cal-head">
+          <button type="button" class="btn" id="calPrev" aria-label="Previous month" disabled><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg></button>
+          <h3 id="calTitle" aria-live="polite">&nbsp;</h3>
+          <button type="button" class="btn" id="calNext" aria-label="Next month" disabled><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg></button>
+        </div>
+        <div class="pl-cal-wd" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+        <div class="pl-cal-grid" id="calGrid"></div>
+        <p class="pl-cal-foot" id="calFoot">&nbsp;</p>
+      </div>
+
+      <div class="panel pl-detail" id="plDay">
+        <div class="pl-detail-head">
+          <div><h3 id="dayH">&nbsp;</h3><p class="kv-sub" id="dayNifty">&nbsp;</p></div>
+          <div class="pl-detail-v num" id="dayV">—</div>
+        </div>
+        <ul class="pl-events" id="dayEvents"></ul>
+        <dl class="pl-detail-kv" id="dayKv"></dl>
+        <div class="chart pl-day-chart" id="plDayChart" role="img" aria-label="P&amp;L line of the selected day"></div>
+        <p class="pl-chart-cap" id="dayCap">&nbsp;</p>
+      </div>
+
+      <div class="panel chart-panel pl-bars">
+        <div class="panel-head">
+          <h3>Day by day</h3>
+          <p class="panel-note">Bars: each day's total. Line: the running total.</p>
+        </div>
+        <div class="chart pl-bars-chart" id="plBarsChart" role="img" aria-label="Daily paper P&amp;L bars and the running total"></div>
+      </div>
+
+      <div class="pl-tx" id="plTx">
+        <div class="panel-head flush"><h3>Transactions</h3><p class="panel-note">Every leg of every paper trade, newest first.</p></div>
+        <div class="pl-tx-list" id="txList"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="days" class="sec" aria-labelledby="h-days">
+    <div class="sec-head">
+      <h2 id="h-days">Every day</h2>
+      <p class="sec-sub">Newest first. Click a date to open it in the day view above.</p>
+    </div>
+    <div class="panel table-panel">
+      <p class="t-summary" id="dSummary" aria-live="polite">&nbsp;</p>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Daily paper P&amp;L table">
+        <table class="ttable pl-table">
+          <thead><tr>
+            <th scope="col"><span class="th">Date</span></th>
+            <th scope="col" class="r"><span class="th">NIFTY close</span></th>
+            <th scope="col"><span class="th">Monthly paper</span></th>
+            <th scope="col"><span class="th">Weekly v3 · LEG-20</span></th>
+            <th scope="col" class="r"><span class="th">Day total</span></th>
+            <th scope="col" class="r"><span class="th">Cumulative</span></th>
+            <th scope="col" class="r"><span class="th">Open</span></th>
+          </tr></thead>
+          <tbody id="dBody"><tr><td class="t-empty" colspan="7">Loading the days…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="sources" class="sec" aria-labelledby="h-sources">
+    <div class="sec-head">
+      <h2 id="h-sources">Where the numbers come from</h2>
+    </div>
+    <ul class="pl-src">
+      <li><b>Monthly paper trade:</b> NSE F&amp;O bhavcopy, the official daily closes. It sells at the close of the month's first trading day; a stop exit fills at the next day's open.</li>
+      <li><b>Weekly paper trades (v3 and LEG-20):</b> NSE's live option chain, one snapshot a minute on expiry days, taken from the owner's PC. NSE gives price snapshots, not candles: a minute's close is the snapshot at :50 seconds, a "next minute's open" fill is the next snapshot, and the 15:15 exit uses the 15:14:50 snapshot. These rows are marked "NSE snapshot".</li>
+      <li><b>How a day's P&amp;L is counted:</b> the change in the open positions' value from one close to the next, plus what was realised on an exit. Charges are booked on the exit day; slippage of 0.25 pt per fill on the day of the fill. 1 set (65 CE + 65 PE).</li>
+    </ul>
+    <p class="disclaimer">These are paper trades, not real orders. No money was at risk. Not advice.</p>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-in">
+    <p id="footerData">Data as of …</p>
+    <p class="muted">MMES · NIFTY expiry strangle · research only</p>
+  </div>
+</footer>
+
+<div class="tip" id="tip" role="tooltip" hidden></div>
+</body>
+</html>

@@ -1,4 +1,4 @@
 {
  "trades": [],
- "note": "No live paper trade yet. The first possible day is Tue 17 Nov 2026; it needs a new Dhan token and the Data API plan."
+ "note": "No weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on the owner's PC from NSE's free option chain (scripts/paper_nse.py)."
 }

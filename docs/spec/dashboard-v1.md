@@ -12,7 +12,7 @@ definition). This repo only displays its results and runs one free daily job.
 | 1 | Hosting | Public GitHub repo `Dev-Shivam-05/mmes`, GitHub Pages → https://dev-shivam-05.github.io/mmes/ |
 | 2 | Branches | Default branch `live`. There is no `main` branch. |
 | 3 | Background job | GitHub Actions `update.yml`: weekdays 11:00 UTC (16:30 IST) + `workflow_dispatch`. ubuntu-latest + xvfb + headed Chrome (Python Playwright, `channel="chrome"`) fetches the day's NSE F&O bhavcopy (1 request a weekday), updates the monthly paper trade, commits `data/*.json`. |
-| 4 | Weekly live data | Not automated (paid Dhan Data API; its token must not leave the owner's machine). Backtest only, plus `scripts/publish_weekly.py`, which the owner runs on the laptop to publish paper-runner rows. |
+| 4 | Weekly live data | Not automated (paid Dhan Data API; its token must not leave the owner's machine). Backtest only, plus `scripts/publish_weekly.py`, which the owner runs on the laptop to publish paper-runner rows. **Superseded by S13** (`pnl-v1.md` row 8): the weekly paper now runs free from NSE's option chain with `scripts/paper_nse.py`; `publish_weekly.py` refuses to overwrite NSE rows. |
 | 5 | Sections (one page) | (1) Today; (2) Strategy cards; (3) Equity curve + drawdown, with (6) the Capital calculator beside it from 1200 px (the owner's reference 6; order accepted 13 Nov); (4) Month heatmap; (5) Trade log; (7) How it works |
 | 6 | Visual tokens | Dark default + light toggle. Dark: bg `#07090D`, panel `#0C1016`, subtle `#121822`, inset `#19202B`, text `#E6EAF2`, muted `#A3ADBD`, faint `#7A8597`, accent `#8B7CFF`, profit `#2FD08A`, loss `#FF5C6C`, warning `#F5B83D`, border `rgba(148,163,184,.10)`. Light: bg `#F4F5F8`, panel `#FFFFFF`, text `#0F172A`, muted `#475569`, accent `#6D5BF5`, profit `#0E9F6E`, loss `#E02D3C`, warning `#B7791F`. Fonts: Inter (UI) + JetBrains Mono (numbers), self-hosted woff2. Spacing scale 8 px. Card radius 12 px. Transitions 160 ms `cubic-bezier(.4,0,.2,1)`. (The palette is the owner's own terminal's, `D:\Temp\Dhan\public\app.css`.) |
 | 6a | Chart series colours (all from the same terminal tokens) | v3 `#8B7CFF` (--accent), leg20 `#5C93F0` (--big-in), leg40 `#F2C438` (--big-out), monthly `#2FD08A` (--up), merged `#E6EAF2` in dark / `#0F172A` in light (--fg-base). Heatmap: loss `#FF5C6C` → 0 `--bg-inset` → profit `#2FD08A`. |
@@ -98,7 +98,7 @@ source `monthly-rows.json` "spot" on 34/34 months (net within ₹0.01).
 
 ### `data/paper-weekly.json`
 `{ "trades": [ledger rows of the source paper runner], "note": string }`. It starts empty, with the note "No live
-paper trade yet. The first possible day is Tue 17 Nov 2026; it needs a new Dhan token and the Data API plan."
+weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on the owner's PC from NSE's free option chain (scripts/paper_nse.py)." (changed by S13: the weekly paper moved from Dhan to NSE, `pnl-v1.md` row 8)
 
 ## Acceptance criteria (binary)
 1. https://dev-shivam-05.github.io/mmes/ answers 200.

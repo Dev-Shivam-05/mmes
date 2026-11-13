@@ -2,6 +2,13 @@
 // No framework and no build step. Every URL is relative so the page works under /mmes/.
 // Rule (row 15): every element on screen is drawn from a data file. Nothing here invents a number.
 
+import {
+  $, $$, reducedMotion, UI_FONT, NUM_FONT, MINUS, nf0, nf2, MON, WD, esc, rupees, signed, signedPts, nowrapMoney, tone, p2,
+  pct1, parseD, fmtDate, fmtDateShort, fmtDateWd, fmtMonth, isoOf, localMs, dateOf, daysBetween, addDays, todayIST, fmtIST,
+  inDays, compactINR, hm, minutesOf, hmOf, cssVar, theme, rgbOf, rgba, divColor, infoBtn, getJSON, staleOf, renderFreshness,
+  setupHeader as setupHeaderC, showTip, hideTip, setupTips, loadECharts, whenNear, tooltipBase, tipRow, axisLabel,
+} from './common.js';
+
 const FILES = {
   meta: 'data/meta.json',
   strategies: 'data/strategies.json',
@@ -22,8 +29,6 @@ const CANDLE_DOWN = '#FF5C6C';
 const SHORT = { v3: 'v3', leg20: 'LEG-20', leg40: 'LEG-40', monthly: 'Monthly', merged: 'Merged' };
 const WEEKLY = ['v3', 'leg20', 'leg40'];
 const LEG_POINTS = { leg20: 20, leg40: 40 };
-const UI_FONT = 'Inter, system-ui, sans-serif';
-const NUM_FONT = '"JetBrains Mono", ui-monospace, Consolas, monospace';
 
 const DEF = {
   net: 'Total of every trade for 1 set, after charges and 0.25 pt slippage per leg per side.',
@@ -56,117 +61,12 @@ const state = {
 
 const charts = {};
 const dayCache = new Map();
-const $ = (s, r = document) => r.querySelector(s);
-const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-// ---------- Formatting ----------
-const MINUS = '−';
-const nf0 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-const nf2 = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const rupees = (v) => '₹' + nf0.format(Math.abs(Math.round(v)));
-function signed(v) {
-  const r = Math.round(v);
-  if (r === 0) return '₹0';
-  return (r > 0 ? '+' : MINUS) + '₹' + nf0.format(Math.abs(r));
-}
-const signedPts = (v) => (v > 0 ? '+' : v < 0 ? MINUS : '') + nf2.format(Math.abs(v));
-// Keep a signed amount on one line inside a sentence ("−₹8,700" must not break after the sign).
-const nowrapMoney = (html) => html.replace(/([+\u2212]?₹[0-9,]+)/g, '<span class="nw">$1</span>');
-const tone = (v) => (v == null ? '' : Math.round(v) > 0 ? 'pos' : Math.round(v) < 0 ? 'neg' : '');
-const p2 = (v) => (v == null || Number.isNaN(Number(v)) ? '—' : nf2.format(Number(v)));
-const pct1 = (v) => `${Number(v).toFixed(1)}%`;
-
-function parseD(s) {
-  const [y, m, d] = String(s).slice(0, 10).split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d || 1));
-}
-const fmtDate = (s) => { const d = parseD(s); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
-const fmtDateShort = (s) => { const d = parseD(s); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
-const fmtDateWd = (s) => `${WD[parseD(s).getUTCDay()]} ${fmtDate(s)}`;
-const fmtMonth = (ym) => { const [y, m] = ym.split('-').map(Number); return `${MON[m - 1]} ${y}`; };
-// ECharts parses 'YYYY-MM-DD' as LOCAL midnight, so a time-axis value must be read back with local getters.
-const isoOf = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-const localMs = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
-const dateOf = (v) => (typeof v === 'number' ? isoOf(v) : String(v).slice(0, 10));
-const daysBetween = (a, b) => Math.round((parseD(b) - parseD(a)) / 864e5);
-const addDays = (iso, n) => new Date(parseD(iso).getTime() + n * 864e5).toISOString().slice(0, 10);
-
-function todayIST() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-}
-function fmtIST(iso) {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(new Date(iso)).map((p) => [p.type, p.value]));
-  return `${parts.day} ${parts.month} ${parts.year}, ${parts.hour}:${parts.minute} IST`;
-}
-function inDays(n) {
-  if (n === 0) return 'today';
-  if (n === 1) return 'tomorrow';
-  if (n < 0) return `${-n} days ago`;
-  return `in ${n} days`;
-}
-// Axis labels in lakh / thousand, the way the owner reads money.
-function compactINR(v) {
-  const a = Math.abs(v);
-  const sign = v < 0 ? MINUS : '';
-  if (a >= 1e5) return `${sign}₹${+(a / 1e5).toFixed(a % 1e5 === 0 ? 0 : 1)}L`;
-  if (a >= 1e3) return `${sign}₹${+(a / 1e3).toFixed(0)}K`;
-  return `${sign}₹${a}`;
-}
-// Option times arrive as "09:15", "0915" or 915; the charts use "09:15".
-function hm(t) {
-  const s = String(t).trim();
-  if (s.includes(':')) { const [h, m] = s.split(':'); return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`; }
-  const p = s.padStart(4, '0');
-  return `${p.slice(0, 2)}:${p.slice(2, 4)}`;
-}
-const minutesOf = (t) => { const [h, m] = hm(t).split(':').map(Number); return h * 60 + m; };
-const hmOf = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-
-function cssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-function theme() {
-  return {
-    bg: cssVar('--bg'), panel: cssVar('--panel'), subtle: cssVar('--subtle'), inset: cssVar('--inset'),
-    text: cssVar('--text'), muted: cssVar('--muted'), faint: cssVar('--faint'), accent: cssVar('--accent'),
-    profit: cssVar('--profit'), loss: cssVar('--loss'), warning: cssVar('--warning'), border: cssVar('--border'),
-    borderStrong: cssVar('--border-strong'), merged: cssVar('--s-merged'), wash: cssVar('--accent-wash'),
-  };
-}
 const seriesColor = (id) => (id === 'merged' ? cssVar('--s-merged') : SERIES[id]);
 const seriesVar = (id) => (id === 'merged' ? 'var(--s-merged)' : SERIES[id]);
-function rgbOf(hex) {
-  const h = hex.replace('#', '');
-  const f = h.length === 3 ? h.split('').map((x) => x + x).join('') : h;
-  return [0, 2, 4].map((i) => parseInt(f.slice(i, i + 2), 16));
-}
-const rgba = (hex, a) => { const [r, g, b] = rgbOf(hex); return `rgba(${r},${g},${b},${a})`; };
-// Diverging scale of row 6a: loss -> bg-inset at 0 -> profit.
-function divColor(v, max, c) {
-  const t = Math.max(-1, Math.min(1, v / (max || 1)));
-  const a = rgbOf(c.inset);
-  const b = rgbOf(t >= 0 ? c.profit : c.loss);
-  const k = Math.abs(t);
-  return `rgb(${a.map((x, i) => Math.round(x + (b[i] - x) * k)).join(',')})`;
-}
-
-const INFO_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.3v4.2M8 4.6v.2" stroke-linecap="round"/></svg>';
-const info = (label, key) => `<button type="button" class="info" data-tip="${esc(DEF[key] || key)}" aria-label="${esc(label)}: ${esc(DEF[key] || key)}">${INFO_SVG}</button>`;
+const info = (label, key) => infoBtn(label, DEF[key] || key);
 const WARN_SVG = '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3 18 17H2L10 3Z"/><path d="M10 8.5v3.5M10 14.5v.1"/></svg>';
 
 // ---------- Data ----------
-async function getJSON(url) {
-  const r = await fetch(url, { cache: 'no-cache' });
-  if (!r.ok) throw new Error(`${url} answered HTTP ${r.status}`);
-  return r.json();
-}
 async function loadAll() {
   const entries = Object.entries(FILES);
   const results = await Promise.allSettled(entries.map(([, url]) => getJSON(url)));
@@ -193,112 +93,13 @@ function safely(fn, el) {
 }
 
 // ---------- Header ----------
-function setupHeader() {
-  const btn = $('#menuBtn');
-  const list = $('#navList');
-  const close = () => { list.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
-  btn.addEventListener('click', () => {
-    const open = !list.classList.contains('open');
-    // The stale banner can sit above the header, so the menu opens under the header's real bottom edge.
-    list.style.top = `${Math.round($('#top').getBoundingClientRect().bottom)}px`;
-    list.classList.toggle('open', open);
-    btn.setAttribute('aria-expanded', String(open));
-  });
-  list.addEventListener('click', (e) => { if (e.target.closest('a')) close(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && list.classList.contains('open')) { close(); btn.focus(); } });
-  document.addEventListener('click', (e) => { if (!e.target.closest('.nav')) close(); });
-  window.matchMedia('(min-width: 821px)').addEventListener('change', close);
-
-  const themeBtn = $('#themeBtn');
-  const syncThemeBtn = () => {
-    const t = document.documentElement.getAttribute('data-theme');
-    themeBtn.setAttribute('aria-label', t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
-    $('meta[name="theme-color"]').setAttribute('content', t === 'dark' ? '#07090D' : '#F4F5F8');
-  };
-  syncThemeBtn();
-  themeBtn.addEventListener('click', () => {
-    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('mmes-theme', next); } catch (e) { /* private mode: the choice lasts this visit */ }
-    syncThemeBtn();
-    retheme();
-  });
-
-  const links = new Map($$('.nav-list a').map((a) => [a.getAttribute('href').slice(1), a]));
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach((en) => {
-      if (!en.isIntersecting) return;
-      links.forEach((a) => a.removeAttribute('aria-current'));
-      links.get(en.target.id)?.setAttribute('aria-current', 'true');
-    });
-  }, { rootMargin: '-40% 0px -55% 0px' });
-  $$('main section[id]').forEach((s) => io.observe(s));
-}
-
-// ---------- Tooltip (info buttons, trade squares, small candles) ----------
-const tipEl = () => $('#tip');
-let tipOwner = null;
-function showTip(el, html) {
-  const tip = tipEl();
-  tipOwner = el;
-  tip.innerHTML = html;
-  tip.hidden = false;
-  if (el.classList.contains('info')) el.setAttribute('aria-describedby', 'tip');
-  const r = el.getBoundingClientRect();
-  const w = tip.offsetWidth;
-  const h = tip.offsetHeight;
-  let top = r.top - h - 8;
-  if (top < 8) top = r.bottom + 8;
-  const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
-  tip.style.top = `${Math.round(top)}px`;
-  tip.style.left = `${Math.round(left)}px`;
-}
-function hideTip() {
-  if (tipOwner) tipOwner.removeAttribute('aria-describedby');
-  tipOwner = null;
-  tipEl().hidden = true;
-}
-const tipHTML = (el) => (el.classList.contains('info') ? esc(el.dataset.tip) : el.dataset.tipHtml || '');
-function setupTips() {
-  const target = (e) => e.target.closest?.('.info, [data-tip-html]');
-  document.addEventListener('pointerover', (e) => { const el = target(e); if (el && e.pointerType === 'mouse') showTip(el, tipHTML(el)); });
-  document.addEventListener('pointerout', (e) => { const el = target(e); if (el && e.pointerType === 'mouse' && !el.contains(e.relatedTarget)) hideTip(); });
-  document.addEventListener('focusin', (e) => { const el = e.target.closest('.info'); if (el) showTip(el, tipHTML(el)); });
-  document.addEventListener('focusout', (e) => { if (e.target.closest('.info')) hideTip(); });
-  document.addEventListener('click', (e) => {
-    const el = e.target.closest('.info');
-    if (el) { e.preventDefault(); e.stopPropagation(); if (tipOwner === el && e.pointerType !== 'mouse') hideTip(); else showTip(el, tipHTML(el)); return; }
-    const sq = e.target.closest('[data-tip-html]');
-    if (sq && e.pointerType && e.pointerType !== 'mouse' && !sq.classList.contains('on')) { showTip(sq, tipHTML(sq)); return; }
-    hideTip();
-  }, true);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
-  window.addEventListener('scroll', hideTip, { passive: true });
-}
+function setupHeader() { setupHeaderC({ onTheme: retheme }); }
 
 // ---------- Stale banner + footer ----------
 // Row 13 plus the lead's client rule: a daily job that stopped running never sets meta.stale, so the page also
 // counts the days since the newest bhavcopy itself (more than 4 calendar days = stale since the day after it).
-function staleInfo() {
-  const m = state.data.meta;
-  if (!m) return { stale: false };
-  if (m.stale) return { stale: true, since: m.staleSince || m.bhavLatest };
-  if (m.bhavLatest && daysBetween(m.bhavLatest, todayIST()) > 4) return { stale: true, since: addDays(m.bhavLatest, 1) };
-  return { stale: false };
-}
-function renderMeta() {
-  const m = state.data.meta;
-  const foot = $('#footerData');
-  if (!m) { foot.textContent = 'Data date unknown: data/meta.json did not load.'; return; }
-  const when = m.updatedAt || m.generatedAt;
-  foot.textContent = `Data as of ${fmtDate(m.bhavLatest)} · updated ${when ? fmtIST(when) : 'unknown'}`;
-  const st = staleInfo();
-  if (st.stale) {
-    const banner = $('#staleBanner');
-    banner.textContent = `Data stale since ${fmtDate(st.since)}`;
-    banner.hidden = false;
-  }
-}
+const staleInfo = () => staleOf(state.data.meta);
+function renderMeta() { renderFreshness(state.data.meta); }
 
 // ---------- 1. Today: ticker strip ----------
 function nextOnOrAfter(list, today) {
@@ -724,27 +525,6 @@ function select(id) {
 }
 
 // ---------- Charts (ECharts, loaded on demand) ----------
-let echartsP = null;
-function loadECharts() {
-  if (window.echarts) return Promise.resolve(window.echarts);
-  if (!echartsP) {
-    echartsP = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'vendor/echarts.min.js';
-      s.onload = () => resolve(window.echarts);
-      s.onerror = () => reject(new Error('vendor/echarts.min.js did not load'));
-      document.head.append(s);
-    });
-  }
-  return echartsP;
-}
-function whenNear(el, fn) {
-  if (!('IntersectionObserver' in window)) { fn(); return; }
-  const io = new IntersectionObserver((entries) => {
-    if (entries.some((e) => e.isIntersecting)) { io.disconnect(); fn(); }
-  }, { rootMargin: '600px 0px' });
-  io.observe(el);
-}
 const narrow = (id) => ($(id)?.clientWidth || 9999) < 560;
 const resizer = new ResizeObserver((entries) => {
   entries.forEach((en) => {
@@ -775,16 +555,6 @@ async function mount(key, el, build, after) {
     return null;
   }
 }
-function tooltipBase(c) {
-  return {
-    confine: true, backgroundColor: c.inset, borderColor: c.borderStrong, borderWidth: 1, padding: [8, 12],
-    textStyle: { color: c.text, fontFamily: UI_FONT, fontSize: 12 },
-    extraCssText: 'border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.35);',
-  };
-}
-const tipRow = (color, name, value, dim) => `<div style="display:flex;justify-content:space-between;gap:16px;align-items:center;line-height:20px;${dim ? 'opacity:.75' : ''}"><span style="display:inline-flex;align-items:center;gap:8px">${color ? `<i style="width:10px;height:3px;border-radius:2px;background:${color};display:inline-block"></i>` : ''}${esc(name)}</span><b style="font-family:${NUM_FONT};font-weight:600">${value}</b></div>`;
-const axisLabel = (c) => ({ color: c.muted, fontFamily: NUM_FONT, fontSize: 12 });
-
 function rangeStart() {
   const m = state.data.meta;
   if (m?.monthlyRange?.[0]) return `${m.monthlyRange[0]}-01`;
@@ -1886,17 +1656,20 @@ function renderHow() {
 // ---------- Charts boot + theme ----------
 function setupCharts() {
   if (missing('strategies')) {
-    ['#equityChart', '#ddChart', '#heatChart'].forEach((s) => { $(s).innerHTML = errBox(['strategies']); });
+    ['#equityChart', '#ddChart'].forEach((s) => { $(s).innerHTML = errBox(['strategies']); });
     return;
   }
   strategies().forEach((s) => { if (!(s.name in state.legendSel)) state.legendSel[s.name] = s.id === state.selected; });
   renderLegend();
   setupRange();
   updateDDHead();
-  renderHeatLegend();
-  layoutHeat();
   whenNear($('#equityChart'), () => mount('eq', $('#equityChart'), eqOption, linkZoom));
   whenNear($('#ddChart'), () => mount('dd', $('#ddChart'), ddOption, linkZoom));
+}
+function setupHeat() {
+  if (missing('strategies')) { $('#heatChart').innerHTML = errBox(['strategies']); return; }
+  renderHeatLegend();
+  layoutHeat();
   whenNear($('#heatChart'), () => mount('heat', $('#heatChart'), heatOption, (ch) => { ch.on('click', heatClick); placeYearLabels(); }));
 }
 function retheme() {
@@ -1908,26 +1681,76 @@ function retheme() {
   if (state.data.strategies) { renderHeatLegend(); updateDDHead(); safely(renderSquares, $('#squares')); }
 }
 
+// ---------- Sections on demand (docs/spec/pnl-v1.md row 10) ----------
+// At load only Today (and the small Capital form) is built. Every section below is built once: when it comes
+// within 600 px of the viewport, or at once when a link jumps to it or past it, so a jump never lands on a
+// half-built page. Each section keeps its placeholder size until then.
+const lazyQ = [];
+function lazy(id, fn) {
+  const item = { id, fn, done: false };
+  lazyQ.push(item);
+  whenNear(document.getElementById(id), () => runLazy(item));
+}
+function runLazy(item) {
+  if (item.done) return;
+  item.done = true;
+  item.fn();
+}
+function buildThrough(targetId) {
+  const target = targetId && document.getElementById(targetId);
+  if (!target) return false;
+  for (const it of lazyQ) {
+    const el = document.getElementById(it.id);
+    const after = el !== target && !el.contains(target) && (target.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (after) break;
+    runLazy(it);
+    if (el === target || el.contains(target)) break;
+  }
+  return true;
+}
+function setupJumps() {
+  // Capture phase: the sections are built before the browser scrolls to the anchor.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest?.('a[href^="#"]');
+    if (a && a.getAttribute('href').length > 1) buildThrough(decodeURIComponent(a.getAttribute('href').slice(1)));
+  }, true);
+  window.addEventListener('hashchange', () => buildThrough(decodeURIComponent(location.hash.slice(1))));
+}
+
 // ---------- Boot ----------
 async function boot() {
   setupHeader();
   setupTips();
+  setupJumps();
   await loadAll();
   safely(renderMeta, $('#footerData'));
   safely(renderTicker, $('#ticker'));
+  // Today in one task (splitting it over three frames measured no better: each frame paid its own layout).
   safely(renderToday, $('#todayBody'));
-  safely(renderStrategies, $('#stratGrid'));
-  safely(renderPerfHead, $('#perfHead'));
-  safely(setupMonthYear, $('#months'));
-  safely(setupCharts, $('#equityChart'));
-  safely(setupSquares, $('#squares'));
-  safely(renderSquares, $('#squares'));
-  safely(renderExitBars, $('#exitBars'));
-  safely(setupMonthlyView, $('#mvChart'));
-  safely(setupDrawer, $('#dayDrawer'));
-  safely(setupTable, $('#tBody'));
-  safely(setupCapital, $('#capOut'));
-  safely(renderHow, $('#exGrid'));
+  // The drawer and the Capital form are not on the first screen: they are set up when the browser is idle
+  // (at most 500 ms later). A/B under vitals.py: mean TBT 71 ms against 157 ms over 12 runs each way.
+  (window.requestIdleCallback || ((f) => setTimeout(f, 1)))(() => {
+    safely(setupDrawer, $('#dayDrawer'));
+    safely(setupCapital, $('#capOut'));
+  }, { timeout: 500 });
+  lazy('strategies', () => safely(renderStrategies, $('#stratGrid')));
+  lazy('performance', () => {
+    safely(renderPerfHead, $('#perfHead'));
+    safely(setupCharts, $('#equityChart'));
+  });
+  lazy('months', () => {
+    safely(setupMonthYear, $('#months'));
+    safely(setupHeat, $('#heatChart'));
+    safely(setupSquares, $('#squares'));
+    safely(renderSquares, $('#squares'));
+    safely(renderExitBars, $('#exitBars'));
+    safely(setupMonthlyView, $('#mvChart'));
+  });
+  lazy('trades', () => safely(setupTable, $('#tBody')));
+  lazy('how', () => safely(renderHow, $('#exGrid')));
+  // Arriving with a #section (for example from the P&L page): build up to it, then go there.
+  const hash = decodeURIComponent(location.hash.slice(1));
+  if (hash && buildThrough(hash)) requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ behavior: 'instant', block: 'start' }));
 }
 
 boot();

@@ -17,7 +17,8 @@ import update  # noqa: E402
 
 LEDGER = Path(r'D:\Temp\Dhan\Shivam-testing\nifty-strangle\out\paper\ledger.csv')
 OUT = update.DATA / 'paper-weekly.json'
-EMPTY_NOTE = 'No live paper trade yet. The first possible day is Tue 17 Nov 2026; it needs a new Dhan token and the Data API plan.'
+EMPTY_NOTE = ("No weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on the owner's PC from NSE's "
+              'free option chain (scripts/paper_nse.py).')
 TEXT = {'date', 'expiry', 'state', 'note', 'why', 'triggerAt', 'exitAt'}     # every other ledger column is a number
 
 
@@ -53,6 +54,14 @@ def git(*args):
 
 
 def main():
+    # S13: scripts/paper_nse.py (NSE, free) replaced this Dhan-ledger path. Writing over its rows would delete them.
+    if OUT.exists():
+        with open(OUT, encoding='utf-8') as fh:
+            cur = json.load(fh)
+        if any(t.get('source') == 'NSE snapshot' for t in cur.get('trades', [])):
+            print('[publish] REFUSED: data/paper-weekly.json holds NSE paper rows from scripts/paper_nse.py; '
+                  'this older Dhan path would overwrite them.')
+            return 1
     update.write_json(OUT, build())
     print(f'[publish] wrote {OUT.relative_to(update.ROOT).as_posix()}')
     if '--push' not in sys.argv:
