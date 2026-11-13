@@ -923,3 +923,82 @@ button.pl-d.today .dn::after { content: ""; display: inline-block; width: 5px; h
   .pl-cal-head .btn { width: 48px; }
   .pl-table td { height: auto; padding-block: 8px; }
 }
+
+/* ---------- S15: the virtual MMES v3 account, its funds ledger and the runner line (docs/spec/account-v1.md rows 7,
+   8). Like the rest of the page, every box has its final size before the data lands (pnl-v1 row 10): the sub lines
+   that depend on the data reserve their lines, and the ledger scrolls inside a box of fixed height. */
+.ac { display: flex; flex-direction: column; gap: var(--s2); margin-bottom: var(--s2); }
+.card.ac:hover { transform: none; box-shadow: none; border-color: var(--border); }
+.ac-head-r { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s2); margin-top: 2px; }
+.ac-title { font-size: 18px; line-height: 26px; }
+/* It fills the row and aligns right, so its box does not move when the text arrives (a layout shift otherwise). */
+.ac-count { flex: 1; min-width: 0; text-align: right; white-space: nowrap; line-height: 26px; }
+.ac-kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); margin: 0; padding-top: var(--s2); border-top: 1px solid var(--border); }
+@media (min-width: 760px) { .ac-kv { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.ac-kv > div { min-width: 0; }
+.ac-kv > div[hidden] { display: none; }
+/* Hidden but still holding its box, so the grid row keeps its height (no layout shift). */
+.ac-kv > div.ac-off { visibility: hidden; }
+.ac-kv dt, .ac-kv dd { margin: 0; }
+/* A label that wraps ("Room above the last margin" on a phone) keeps its info button right after the last word. */
+.ac-kv dt.label { display: block; }
+.ac-kv dt .info { vertical-align: -4px; }
+@media (min-width: 701px) { .ac-kv dt .info { margin-left: 2px; } }
+.ac-kv .kv-v { line-height: 24px; white-space: nowrap; }
+.ac-kv .kv-sub { line-height: 18px; }
+.ac-line { display: block; }
+/* The margin and room sub lines: up to three lines on a phone or a narrow screen, two at 1200 px and up. */
+.ac-kv .ac-res { min-height: 54px; }
+@media (min-width: 1200px) { .ac-kv .ac-res { min-height: 36px; } }
+.ac-run { position: relative; padding: 10px 12px 10px 30px; border-radius: var(--radius-sm); background: var(--subtle); border: 1px solid var(--border); }
+:root[data-theme="light"] .ac-run { background: var(--inset); }
+.ac-run::before { content: ""; position: absolute; left: 13px; top: 17px; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+.ac-run[data-st="run"]::before { background: var(--accent); }
+.ac-run[data-st="ok"]::before { background: var(--profit); }
+.ac-run[data-st="warn"], :root[data-theme="light"] .ac-run[data-st="warn"] {
+  color: var(--warning-text); background: color-mix(in srgb, var(--warning) 9%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+}
+.ac-run[data-st="warn"]::before { background: var(--warning); }
+/* Two status lines and one sub line on a phone, one and one wider: the box keeps that height in every state. */
+.ac-run { min-height: 80px; }
+@media (min-width: 760px) { .ac-run { min-height: 60px; } }
+.ac-run-t { font-size: 13px; line-height: 20px; font-weight: 500; }
+.ac-run-s { line-height: 18px; margin-top: 0; }
+.ac-run .mono { font-size: 12px; }
+
+.ac-led { margin-bottom: var(--s5); }
+.ac-led-head { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border); }
+.ac-led-scroll { height: 280px; }
+.ac-led-t .th { display: block; padding: 10px 12px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ac-led-t th.r .th { text-align: right; }
+.ac-led-t td { vertical-align: top; line-height: 20px; }
+.ac-led-t td.ac-e { white-space: normal; width: 100%; }
+.ac-t, .ac-leg, .ac-s { display: block; position: relative; padding-left: 14px; }
+.ac-t::before { content: ""; position: absolute; left: 1px; top: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.k-trade .ac-t::before { background: var(--accent); }
+.k-skip .ac-t { color: var(--warning-text); }
+.k-skip .ac-t::before { background: var(--warning); }
+.k-none .ac-t, .k-open .ac-t { color: var(--muted); }
+.ac-leg { font-family: var(--font-num); font-size: 12px; line-height: 18px; }
+.ac-s { font-size: 12px; line-height: 18px; color: var(--muted); }
+.ac-s .mono { color: var(--text); }
+.ac-a.quiet { color: var(--muted); }
+.ac-lbl { display: none; }
+@media (max-width: 820px) { .ac-led-head { padding: 12px var(--s2); } }
+/* A phone stacks each line: date and amount, then the entry, then the balance after. No sideways scroll. */
+@media (max-width: 700px) {
+  /* On a phone the ledger already starts near the fold, and its 180 px floor ends below it, so growing up to 400 px
+     with its lines only moves content that is not on screen yet (no counted layout shift). */
+  .ac-led-scroll { height: auto; min-height: 180px; max-height: 400px; }
+  .ac-led-t thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .ac-led-t, .ac-led-t tbody { display: block; }
+  .ac-led-t tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "d a" "e e" "b b"; column-gap: 12px; padding: 10px var(--s2); border-bottom: 1px solid var(--border); }
+  .ac-led-t td { display: block; height: auto; padding: 0; border: 0; }
+  .ac-led-t td.ac-d { grid-area: d; }
+  .ac-led-t td.ac-a { grid-area: a; font-weight: 600; }
+  .ac-led-t td.ac-e { grid-area: e; margin-top: 4px; }
+  .ac-led-t td.ac-b { grid-area: b; margin-top: 2px; font-size: 12px; color: var(--muted); }
+  .ac-led-t td.t-empty { grid-column: 1 / -1; }
+  .ac-lbl { display: inline; font-family: var(--font-ui); }
+}

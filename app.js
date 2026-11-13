@@ -359,7 +359,7 @@ function renderToday() {
         <div class="card t-card">
           <div class="t-head"><h3>Weekly paper trade</h3><span class="pill waiting">Not started</span></div>
           <p class="note-box">${esc(pw.note)}</p>
-          <p class="kv-sub">It runs the Weekly v3 rules on each expiry day, on the owner's PC, and publishes each day here.</p>
+          <p class="kv-sub">It runs the Weekly v3 rules on each expiry day on GitHub, from NSE's live option chain, and publishes each day here.</p>
         </div>`);
     } else {
       const last = trades[trades.length - 1];

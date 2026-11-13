@@ -1,0 +1,33 @@
+{
+ "opening": 270000,
+ "openedOn": "2026-11-16",
+ "strategy": "v3",
+ "lot": 65,
+ "asOf": "2026-11-12",
+ "balance": 270000.0,
+ "realized": 0.0,
+ "charges": 0.0,
+ "net": 0.0,
+ "marginBlocked": 0.0,
+ "available": 270000.0,
+ "openMtm": 0.0,
+ "equity": 270000.0,
+ "returnPct": 0.0,
+ "trades": 0,
+ "skipped": 0,
+ "lastMargin": null,
+ "room": null,
+ "ledger": [
+  {
+   "date": "2026-11-16",
+   "kind": "open",
+   "text": "Opening balance (virtual money)",
+   "amount": 270000.0,
+   "balance": 270000.0,
+   "gross": null,
+   "charges": null,
+   "fill": null,
+   "legs": null
+  }
+ ]
+}

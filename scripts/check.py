@@ -16,6 +16,13 @@
   (g) rules regression (AC4): mmes_rules.py over the 143 archive days must equal replay-v3.csv (v3) and
       leg-sl-days.csv (LEG-20), 143/143, net within Rs 0.01, the same exit times; and cut at every 13th minute it may
       never decide differently. Needs the source archive; prints SKIP where it is absent (CI).
+  (h) the virtual account (docs/spec/account-v1.md, AC4-AC6): data/account.json recomputed from the v3 weekly rows
+      with code written apart from account.py: the opening, the margin rule, every bid/ask fill re-read from the
+      committed raw snapshots, charges, the running balance, available, equity, return.
+  (i) no-cheating row 10 c (AC7): a weekly row, an account ledger line or a raw snapshot file dated before today (IST)
+      may never change. Compared with the committed version (HEAD, or HEAD~1 when the tree equals HEAD; CI checks out
+      with fetch-depth 2).
+  (j) data/runner.json is well formed (account-v1.md row 7).
   (c) privacy grep over every file in the repo except .git/
 """
 import gzip
@@ -24,8 +31,9 @@ import math
 import os
 import random
 import re
+import subprocess
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,6 +71,10 @@ KEYS = {
     'nifty-daily.json': ['source', 'candles'],
     'paper-legs.json': ['month', 'ceK', 'peK', 'ce', 'pe'],
     'pnl-daily.json': ['start', 'asOf', 'summary', 'days', 'trades', 'intraday'],
+    'account.json': ['opening', 'openedOn', 'strategy', 'lot', 'asOf', 'balance', 'realized', 'charges', 'net',
+                     'marginBlocked', 'available', 'openMtm', 'equity', 'returnPct', 'trades', 'skipped', 'lastMargin',
+                     'room', 'ledger'],
+    'runner.json': ['date', 'where', 'status', 'startedAt', 'updatedAt', 'note'],
 }
 STRAT_KEYS = ['id', 'name', 'tagline', 'kind', 'rules', 'kpi', 'notes', 'equity', 'months']
 KPI_KEYS = ['trades', 'winPct', 'net', 'net50', 'perYear', 'worst', 'worstUnit', 'maxDD', 'capitalMin', 'capitalSafe', 'marginPeak']
@@ -270,8 +282,10 @@ def check_kpis(got):
     if abs(fwd - 120_354) > 1:
         fail(f'(a) forward-centred monthly net is {fwd}, the note says 1,20,354')
     pw = got['paper-weekly.json']
+    # account-v1.md row 6 moved the runner to GitHub; the PC is the backup (row 7)
     if not pw['trades'] and pw['note'] != ('No weekly paper trade yet. The first possible day is Tue 17 Nov 2026. It runs on '
-                                           "the owner's PC from NSE's free option chain (scripts/paper_nse.py)."):
+                                           "GitHub on each expiry day from NSE's free option chain (scripts/paper_nse.py); "
+                                           "the owner's PC is the backup."):
         fail('(d) paper-weekly note is not the contract\'s empty-ledger note')
     if len(FAILS) == n0:
         ok('(a) every card KPI equals its recomputation (Rs 1) and the contract\'s expected values')
@@ -722,6 +736,243 @@ def report_pnl(got):
            + ', '.join(f"{t['id']} {t['net']}" for t in mt))
 
 
+# ------------------------------------------------------------------------------------------------ (h) account
+ACC_OPENING, ACC_OPENED, ACC_LOT = 270000, '2026-11-16', 65         # account-v1.md rows 1-2
+ACC_ENTRY_MIN, ACC_SQ, ACC_SQ_SNAP = '09:26', '15:15', '15:14'      # v3 sells at 09:26; the 15:15 open = 15:14:50 snapshot
+IST_ = timezone(timedelta(hours=5, minutes=30))
+
+
+def raw_snapshots(snap_dir, d):
+    """{minute: snapshot} of a day's committed raw file, or None when there is none."""
+    f = Path(snap_dir) / f'{d}.jsonl.gz'
+    if not f.exists():
+        return None
+    out = {}
+    for line in gzip.decompress(f.read_bytes()).decode('utf-8').splitlines():
+        s = json.loads(line)
+        out[s['m']] = s
+    return out
+
+
+def snap_quote(snaps, minute, k, side):
+    """(ltp, bid, ask) of strike k at `minute`, from that minute's snapshot or the newest one before it (the rules
+    carry a missed minute forward). (None, None, None) when nothing is there."""
+    have = sorted(m for m in snaps if m <= minute)
+    if not have:
+        return None, None, None
+    for row in snaps[have[-1]]['rows']:
+        if row[0] == k:
+            return tuple(row[1:4]) if side == 'CE' else tuple(row[4:7])
+    return None, None, None
+
+
+def check_account(acc, weekly, snap_dir=None):
+    """(h). Returns the list of problems. paper_nse.py --dry / --sim call it on their own outputs under .cache/."""
+    probs = []
+    bad = probs.append
+    snap_dir = snap_dir or DATA / 'snapshots'
+    if (acc.get('opening'), acc.get('openedOn'), acc.get('strategy'), acc.get('lot')) != (ACC_OPENING, ACC_OPENED, 'v3', ACC_LOT):
+        bad(f"opening / openedOn / strategy / lot are {acc.get('opening')} / {acc.get('openedOn')} / "
+            f"{acc.get('strategy')} / {acc.get('lot')}, the contract says 270000 / 2026-11-16 / v3 / 65")
+    rows = sorted((r for r in weekly.get('trades', []) if r.get('strategy') == 'v3' and (r.get('date') or '') >= ACC_OPENED),
+                  key=lambda r: r['date'])
+    led = acc.get('ledger') or []
+    if len(led) != 1 + len(rows):
+        bad(f'ledger has {len(led)} lines, expected 1 opening + {len(rows)} v3 day(s)')
+        return probs
+    first = led[0]
+    if (first.get('kind'), first.get('date'), first.get('amount'), first.get('balance')) != ('open', ACC_OPENED, ACC_OPENING, ACC_OPENING):
+        bad(f'ledger line 1 is not the opening balance: {first}')
+    bal, gross_sum, chg_sum, n_tr, n_sk, last_m = float(ACC_OPENING), 0.0, 0.0, 0, 0, None
+    for r, e in zip(rows, led[1:]):
+        d = r['date']
+        if e.get('date') != d:
+            bad(f"ledger line for {d} is dated {e.get('date')}"); continue
+        m = r.get('margin') if isinstance(r.get('margin'), dict) else None
+        if m and 'total' in m:
+            if not (near(m['total'], m['span'] + m['exposure'] + m['elm'], 0.02) and near(m['elm'], m['exposure'], 0.001)):
+                bad(f"{d}: margin {m} is not SPAN + exposure + an expiry ELM equal to the exposure")
+            last_m = m
+        elif m and 'error' not in m:
+            bad(f'{d}: margin is neither measured nor an error: {m}')
+        if r.get('slip') is None:
+            want_kind, amount = 'none', 0.0
+        elif m and 'total' in m and bal < m['total']:
+            want_kind, amount = 'skip', 0.0
+            if not (e.get('text') or '').startswith('Skipped: insufficient funds'):
+                bad(f"{d}: a refused trade must read 'Skipped: insufficient funds', it reads {e.get('text')!r}")
+        else:
+            want_kind = 'trade'
+            ba = r.get('ba')
+            if ba:
+                ce, pe = int(r['ceK']), int(r['peK'])
+                out_snap = ACC_SQ_SNAP if ba.get('outAt') == ACC_SQ else ba.get('outAt')
+                if ba.get('inAt') != ACC_ENTRY_MIN or ba.get('outAt') != r.get('ceExit'):
+                    bad(f"{d}: bid/ask fill times {ba.get('inAt')} / {ba.get('outAt')}, the rules filled at "
+                        f"{ACC_ENTRY_MIN} / {r.get('ceExit')}")
+                snaps = raw_snapshots(snap_dir, d)
+                if snaps is None:
+                    bad(f'{d}: no raw snapshot file {d}.jsonl.gz to re-read the fills from (row 10 d)')
+                else:
+                    # AC6: each booked price is the snapshot's bid (we sell) or ask (we buy); a missing quote falls
+                    # back to the LTP fill -/+ 0.25. And the LTP fill is the snapshot's LTP (the rules' own fill).
+                    for key, minute, k, side, col, ltp_key, sign in (
+                            ('ceIn', ACC_ENTRY_MIN, ce, 'CE', 1, 'ceIn', -1), ('peIn', ACC_ENTRY_MIN, pe, 'PE', 1, 'peIn', -1),
+                            ('ceOut', out_snap, ce, 'CE', 2, 'ceOut', 1), ('peOut', out_snap, pe, 'PE', 2, 'peOut', 1)):
+                        q = snap_quote(snaps, minute, k, side)
+                        want = q[col] if q[col] is not None else max(0.05, r[ltp_key] + sign * 0.25)
+                        if not near(ba[key], want, 0.001):
+                            bad(f"{d}: bid/ask {key} {ba[key]}, the snapshot says {want} ({minute} {k} {side})")
+                        if key.endswith('In') and q[0] is not None and not near(r[ltp_key], q[0], 0.001):
+                            bad(f"{d}: LTP fill {ltp_key} {r[ltp_key]}, the {minute} snapshot LTP is {q[0]}")
+                pts = (ba['ceIn'] - ba['ceOut']) + (ba['peIn'] - ba['peOut'])
+                chg = (brokerage(d, ba['ceOut'] * ACC_LOT, ba['ceIn'] * ACC_LOT)
+                       + brokerage(d, ba['peOut'] * ACC_LOT, ba['peIn'] * ACC_LOT))
+                amount = pts * ACC_LOT - chg
+                for k_, v_ in (('pts', pts), ('charges', chg), ('net', amount)):
+                    if not near(ba[k_], v_, 0.011):
+                        bad(f'{d}: ba.{k_} {ba[k_]}, recomputed {v_:.2f}')
+                if not (near(e.get('gross'), pts * ACC_LOT, 0.011) and near(e.get('charges'), chg, 0.011)):
+                    bad(f"{d}: ledger gross / charges {e.get('gross')} / {e.get('charges')}, recomputed "
+                        f"{pts * ACC_LOT:.2f} / {chg:.2f}")
+                if e.get('fill') != ('est' if ba.get('est') else 'bid/ask'):
+                    bad(f"{d}: fill {e.get('fill')!r} but est = {ba.get('est')}")
+                gross_sum += pts * ACC_LOT; chg_sum += chg
+            else:
+                amount = r['slip']
+                if e.get('fill') != 'est':
+                    bad(f"{d}: a row without bid/ask fills must say fill 'est'")
+                gross_sum += r['pts'] * ACC_LOT; chg_sum += r['charges']
+        if e.get('kind') != want_kind:
+            bad(f"{d}: ledger kind {e.get('kind')}, expected {want_kind}"); continue
+        if not near(e.get('amount'), amount, 0.011):
+            bad(f"{d}: ledger amount {e.get('amount')}, recomputed {amount:.2f}")
+        bal += amount
+        n_tr += want_kind == 'trade'; n_sk += want_kind == 'skip'
+        if not near(e.get('balance'), bal, 0.02):
+            bad(f"{d}: balance after {e.get('balance')}, recomputed {bal:.2f}")
+    # AC4: the summary from the recomputed chain
+    for k_, v_ in (('balance', bal), ('net', bal - ACC_OPENING), ('realized', gross_sum), ('charges', chg_sum)):
+        if not near(acc.get(k_), v_, 0.02 * max(1, len(rows))):
+            bad(f'{k_} {acc.get(k_)}, recomputed {v_:.2f}')
+    if acc.get('marginBlocked') != 0 or acc.get('openMtm') != 0:
+        bad('marginBlocked and openMtm must be 0 in a file written after the close (row 8)')
+    if not near(acc.get('available'), (acc.get('balance') or 0) - (acc.get('marginBlocked') or 0), 0.006):
+        bad(f"available {acc.get('available')} != balance - marginBlocked")
+    if not near(acc.get('equity'), (acc.get('balance') or 0) + (acc.get('openMtm') or 0), 0.006):
+        bad(f"equity {acc.get('equity')} != balance + openMtm")
+    if not near(acc.get('returnPct'), ((acc.get('equity') or 0) - ACC_OPENING) / ACC_OPENING * 100, 0.006):
+        bad(f"returnPct {acc.get('returnPct')} != (equity - opening) / opening")
+    if (acc.get('trades'), acc.get('skipped')) != (n_tr, n_sk):
+        bad(f"trades / skipped {acc.get('trades')} / {acc.get('skipped')}, recomputed {n_tr} / {n_sk}")
+    lm = acc.get('lastMargin')
+    if (lm is None) != (last_m is None) or (lm and not near(lm.get('total'), last_m['total'], 0.001)):
+        bad(f'lastMargin {lm}, the last measured margin is {last_m}')
+    if lm and not near(acc.get('room'), acc['balance'] - lm['total'], 0.011):
+        bad(f"room {acc.get('room')} != balance - lastMargin.total")
+    if not lm and acc.get('room') is not None:
+        bad('room must be null without a measured margin')
+    return probs
+
+
+def report_account(got):
+    probs = check_account(got['account.json'], got['paper-weekly.json'])
+    for x in probs:
+        fail(f'(h) {x}')
+    if not probs:
+        a = got['account.json']
+        ok(f"(h) account: {len(a['ledger'])} ledger line(s) recompute; balance {a['balance']}, {a['trades']} trade(s), "
+           f"{a['skipped']} skipped, available = balance - margin, every bid/ask fill re-read from its raw snapshots")
+
+
+# ------------------------------------------------------------------------------------------------ (i) append-only
+def past_changes(old, new, today):
+    """(i) as a pure function, so a test can feed it any pair. old / new: {'weekly': paper-weekly.json, 'ledger':
+    account.json's ledger}. Returns the problems: every weekly row and ledger line of `old` dated before `today` must
+    be in `new` unchanged."""
+    probs = []
+    key = lambda r: (r.get('date'), r.get('strategy'))       # noqa: E731
+    new_rows = {key(r): r for r in (new.get('weekly') or {}).get('trades', [])}
+    for r in (old.get('weekly') or {}).get('trades', []):
+        if (r.get('date') or '') < today and new_rows.get(key(r)) != r:
+            probs.append(f"weekly row {key(r)} changed or vanished after its day")
+    old_l = [e for e in (old.get('ledger') or []) if (e.get('date') or '') < today]
+    new_l = [e for e in (new.get('ledger') or []) if (e.get('date') or '') < today]
+    if new_l[:len(old_l)] != old_l:
+        probs.append('an account ledger line dated before today changed or vanished')
+    return probs
+
+
+def git_bytes(rev, rel):
+    p = subprocess.run(['git', 'show', f'{rev}:{rel}'], cwd=ROOT, capture_output=True)
+    return p.stdout if p.returncode == 0 else None
+
+
+def check_history():
+    today = datetime.now(IST_).date().isoformat()
+    if subprocess.run(['git', 'rev-parse', '--verify', '-q', 'HEAD'], cwd=ROOT, capture_output=True).returncode != 0:
+        fail('(i) append-only: no git history here, so a past row could change unseen'); return
+    files = ['data/paper-weekly.json', 'data/account.json']
+    snaps = sorted(p.relative_to(ROOT).as_posix() for p in (DATA / 'snapshots').glob('*.jsonl.gz'))
+    cur = {f: (ROOT / f).read_bytes() if (ROOT / f).exists() else None for f in files + snaps}
+    at_head = {f: git_bytes('HEAD', f) for f in cur}
+    rev = 'HEAD'
+    if all(cur[f] == at_head[f] for f in cur):            # a clean tree (CI after a push): check HEAD against HEAD~1
+        if subprocess.run(['git', 'rev-parse', '--verify', '-q', 'HEAD~1'], cwd=ROOT, capture_output=True).returncode != 0:
+            fail('(i) append-only: no HEAD~1 to compare with (a shallow checkout? use fetch-depth: 2)'); return
+        rev = 'HEAD~1'
+        old_b = {f: git_bytes(rev, f) for f in cur}
+        new_b = at_head
+    else:
+        old_b, new_b = at_head, cur
+    parse = lambda b: json.loads(b.decode('utf-8')) if b else {}     # noqa: E731
+    probs = past_changes({'weekly': parse(old_b['data/paper-weekly.json']),
+                          'ledger': parse(old_b['data/account.json']).get('ledger')},
+                         {'weekly': parse(new_b['data/paper-weekly.json']),
+                          'ledger': parse(new_b['data/account.json']).get('ledger')}, today)
+    for f in snaps:
+        d = Path(f).name[:10]
+        if d < today and old_b.get(f) is not None and old_b[f] != new_b.get(f):
+            probs.append(f'raw snapshot file {Path(f).name} changed after its day')
+    for x in probs:
+        fail(f'(i) {x}')
+    if not probs:
+        ok(f'(i) append-only: nothing dated before {today} differs from {rev} (weekly rows, ledger, {len(snaps)} raw file(s))')
+
+
+# ------------------------------------------------------------------------------------------------ (j) runner
+RUN_TIME = re.compile(r'^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$')
+
+
+def check_runner(r):
+    probs = []
+    if r.get('status') == 'none':
+        if any(r.get(k) is not None for k in ('date', 'where', 'startedAt', 'updatedAt')):
+            probs.append('status "none" (never ran) must have null date, where and times')
+    elif r.get('status') in ('started', 'done', 'failed'):
+        try:
+            date.fromisoformat(r.get('date') or '')
+        except ValueError:
+            probs.append(f"date {r.get('date')!r} is not YYYY-MM-DD")
+        if r.get('where') not in ('github', 'pc'):
+            probs.append(f"where {r.get('where')!r} is not github / pc")
+        for k in ('startedAt', 'updatedAt'):
+            if not RUN_TIME.match(str(r.get(k))):
+                probs.append(f'{k} {r.get(k)!r} is not YYYY-MM-DD HH:MM:SS')
+    else:
+        probs.append(f"status {r.get('status')!r} is not none / started / done / failed")
+    return probs
+
+
+def report_runner(got):
+    probs = check_runner(got['runner.json'])
+    for x in probs:
+        fail(f'(j) runner.json: {x}')
+    if not probs:
+        r = got['runner.json']
+        ok(f"(j) runner.json: {r['status']}" + (f" {r['date']} on {r['where']}" if r['status'] != 'none' else ''))
+
+
 # ------------------------------------------------------------------------------------------------ (g) rules
 def check_rules():
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -797,6 +1048,18 @@ def main():
             report_pnl(got)
         except Exception as e:
             fail(f'(f) crashed: {type(e).__name__}: {e}')
+        try:
+            report_account(got)
+        except Exception as e:
+            fail(f'(h) crashed: {type(e).__name__}: {e}')
+        try:
+            report_runner(got)
+        except Exception as e:
+            fail(f'(j) crashed: {type(e).__name__}: {e}')
+    try:
+        check_history()
+    except Exception as e:
+        fail(f'(i) crashed: {type(e).__name__}: {e}')
     try:
         check_rules()
     except Exception as e:
