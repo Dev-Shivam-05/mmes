@@ -1,6 +1,6 @@
 {
  "start": "2026-11-02",
- "asOf": "2026-11-17",
+ "asOf": "2026-11-18",
  "summary": {
   "net": -26745.98,
   "realized": -26204.75,
@@ -18,8 +18,8 @@
   },
   "greenDays": 1,
   "redDays": 5,
-  "flatDays": 5,
-  "days": 11,
+  "flatDays": 6,
+  "days": 12,
   "backtestPerTrade": {
    "monthly": 5237.06,
    "v3": 603.77,
@@ -270,6 +270,28 @@
    "events": [
     "Weekly LEG-20: sold 25400 CE @ 32.25 + 25250 PE @ 29.70, CE out at 10:19, PE out at 15:15 (CE STOP), net -₹448.52 (NSE snapshot, 1 minute(s) carried forward)",
     "Weekly v3: sold 25400 CE @ 32.25 + 25250 PE @ 29.70, both out at 12:02 (STOP), net -₹4,415.29 (NSE snapshot, 1 minute(s) carried forward)"
+   ]
+  },
+  {
+   "date": "2026-11-18",
+   "nifty": {
+    "close": 25227.95,
+    "chg": -159.45
+   },
+   "monthly": {
+    "event": "none",
+    "pnl": 0.0,
+    "value": null
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": 0.0,
+   "cum": -26745.98,
+   "open": 0,
+   "events": [
+    "No position"
    ]
   }
  ],
