@@ -3,7 +3,7 @@
  "openedOn": "2026-11-16",
  "strategy": "v3",
  "lot": 65,
- "asOf": "2026-11-20",
+ "asOf": "2026-11-23",
  "balance": 270000.0,
  "realized": 0.0,
  "charges": 0.0,
@@ -14,16 +14,16 @@
  "equity": 270000.0,
  "returnPct": 0.0,
  "trades": 0,
- "skipped": 1,
+ "skipped": 2,
  "lastMargin": {
-  "date": "2026-11-17",
-  "scrip": "NIFTY26N17",
-  "span": 151234.5,
+  "date": "2026-11-23",
+  "scrip": "NIFTY26NOV",
+  "span": 152872.0,
   "exposure": 124786.22,
   "elm": 124786.22,
-  "total": 400806.94
+  "total": 402444.44
  },
- "room": -130806.94,
+ "room": -132444.44,
  "ledger": [
   {
    "date": "2026-11-16",
@@ -45,6 +45,17 @@
    "amount": 0.0,
    "kind": "skip",
    "text": "Skipped: insufficient funds (need ₹4,00,806.94, have ₹2,70,000.00)",
+   "balance": 270000.0
+  },
+  {
+   "date": "2026-11-23",
+   "gross": null,
+   "charges": null,
+   "fill": null,
+   "legs": null,
+   "amount": 0.0,
+   "kind": "skip",
+   "text": "Skipped: insufficient funds (need ₹4,02,444.44, have ₹2,70,000.00)",
    "balance": 270000.0
   }
  ]
