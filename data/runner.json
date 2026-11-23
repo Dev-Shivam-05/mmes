@@ -1,8 +1,8 @@
 {
- "date": "2026-11-17",
+ "date": "2026-11-23",
  "where": "github",
- "status": "done",
- "startedAt": "2026-11-17 06:40:48",
- "updatedAt": "2026-11-17 15:15:50",
- "note": "v3: STOP; 360 of 361 snapshots, 1 carried forward"
+ "status": "started",
+ "startedAt": "2026-11-23 06:40:57",
+ "updatedAt": "2026-11-23 06:40:57",
+ "note": "GitHub runner started"
 }
