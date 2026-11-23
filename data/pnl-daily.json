@@ -341,8 +341,8 @@
   {
    "date": "2026-11-23",
    "nifty": {
-    "close": null,
-    "chg": null
+    "close": 25349.65,
+    "chg": -450.95
    },
    "monthly": {
     "event": "none",
