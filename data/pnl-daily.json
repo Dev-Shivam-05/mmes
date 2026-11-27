@@ -1,6 +1,6 @@
 {
  "start": "2026-11-02",
- "asOf": "2026-11-26",
+ "asOf": "2026-11-27",
  "summary": {
   "net": -35203.9,
   "realized": -34297.25,
@@ -18,8 +18,8 @@
   },
   "greenDays": 1,
   "redDays": 6,
-  "flatDays": 10,
-  "days": 17,
+  "flatDays": 11,
+  "days": 18,
   "backtestPerTrade": {
    "monthly": 5237.06,
    "v3": 603.77,
@@ -394,6 +394,28 @@
    "nifty": {
     "close": 25884.5,
     "chg": 65.25
+   },
+   "monthly": {
+    "event": "none",
+    "pnl": 0.0,
+    "value": null
+   },
+   "weekly": {
+    "v3": null,
+    "leg20": null
+   },
+   "total": 0.0,
+   "cum": -35203.9,
+   "open": 0,
+   "events": [
+    "No position"
+   ]
+  },
+  {
+   "date": "2026-11-27",
+   "nifty": {
+    "close": 25607.2,
+    "chg": -277.3
    },
    "monthly": {
     "event": "none",
